@@ -39,9 +39,6 @@ COPY scripts/ /app/scripts/
 # Copy schemas
 COPY schemas/ /app/schemas/
 
-# Copy constants and utilities
-COPY constants.js validation.js /app/
-
 # Create data and logs directories
 RUN mkdir -p /app/data /app/logs /app/data/garmin/HealthData/DBs /app/backend/data
 

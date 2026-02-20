@@ -452,11 +452,27 @@ export async function detectPerformanceGaps(profileId) {
   );
   if (yogaGap) gaps.push(yogaGap);
   
-  // Save gaps to database
+  // Save detected gaps to database
   for (const gap of gaps) {
     await savePerformanceGap(profileId, gap);
   }
-  
+
+  // Resolve old gaps whose modality is no longer a gap
+  const detectedModalities = gaps.map(g => g.modality);
+  const allCheckedModalities = ['strength', 'yoga'];
+  const resolvedModalities = allCheckedModalities.filter(m => !detectedModalities.includes(m));
+  if (resolvedModalities.length > 0) {
+    await db('performance_gaps')
+      .where({ profile_id: profileId, resolved_at: null })
+      .whereIn('modality', resolvedModalities)
+      .update({ resolved_at: new Date().toISOString() });
+  }
+
+  // Always resolve legacy 'hiit' gaps (HIIT is intensity, not a sport type)
+  await db('performance_gaps')
+    .where({ profile_id: profileId, modality: 'hiit', resolved_at: null })
+    .update({ resolved_at: new Date().toISOString() });
+
   const result = { gaps, count: gaps.length };
   return await addDataContextToResponseByProfileId(profileId, result);
 }
