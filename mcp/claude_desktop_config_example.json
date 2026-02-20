@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "garmin-ai-coach": {
+      "command": "node",
+      "args": [
+        "/Users/tsochkata/git/coach/mcp/coach-mcp-server.js"
+      ],
+      "env": {
+        "COACH_API_URL": "http://localhost:8080"
+      }
+    }
+  }
+}

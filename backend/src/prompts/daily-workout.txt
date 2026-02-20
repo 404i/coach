@@ -1,0 +1,99 @@
+Generate today's workout recommendations for the athlete based on the following context.
+
+CONTEXT:
+{{CONTEXT}}
+
+ANALYSIS REQUIRED:
+1. Planned Activities: Check context.planned_activities - if athlete mentioned plans for today, HONOR them by aligning recommendations
+2. Recovery Status: Analyze sleep, HRV, RHR, and subjective inputs. Is athlete recovered enough for today's session?
+3. Training Load: Check acute vs chronic load. Are they overreaching? Under-trained?
+4. Weekly Pattern: Where are they in current week? Hard days already done?
+5. Injury Status: Any active injuries or pain that limits exercise selection?
+6. Constraints: Available equipment, time, weather conditions
+
+PLANNED ACTIVITIES RULES:
+- If athlete mentioned "yoga tonight" or "DH park next weekend" → prioritize those activities in recommendations
+- Match the activity type they mentioned (yoga → suggest yoga, mountain_biking → suggest bike/strength prep)
+- If it's a high-priority or committed event → build other days around it for optimal preparation/recovery
+- Reference their plans in coach_notes ("Great choice on yoga tonight! Here's how to...")
+- If plans conflict with recovery needs → gently suggest modified version + explain why
+
+GUARDRAIL CHECKS (CRITICAL):
+- If overtraining signals detected → Force recovery day
+- If pain ≥4/10 → No high-intensity or sport with that injury
+- If illness symptoms → Rest only
+- If injury contraindications present → Exclude those sports entirely
+- If 2+ hard days already this week → Cap intensity
+
+OUTPUT REQUIREMENTS:
+Return JSON with this EXACT structure:
+
+{
+  "recovery_assessment": {
+    "status": "recovered|marginal|poor",
+    "reasoning": "Detailed analysis of sleep, HRV, RHR, subjective markers",
+    "force_recovery": false,
+    "guardrails_triggered": []
+  },
+  "recommended_state": "recover|maintain|build",
+  "plan_a": {
+    "title": "Descriptive workout name",
+    "location": "outdoor",
+    "sport": "MUST BE EXACTLY ONE OF: run, bike, swim, strength, yoga, hiit, walk, rest",
+    "intensity": "rest|easy_aerobic|tempo_threshold|hiit",
+    "duration_min": 30,
+    "target_zones": ["Z1", "Z2"],
+    "equipment_needed": [],
+    "steps": [
+      "Step 1: Warm-up instructions",
+      "Step 2: Main set details",
+      "Step 3: Cool-down"
+    ],
+    "reasoning": "Why this is the best option today",
+    "weather_notes": "Clothing/gear suggestions for conditions"
+  },
+  "plan_b": {
+    "title": "Outdoor backup (easier option)",
+    "location": "outdoor",
+    "sport": "...",
+    "intensity": "One level easier than plan_a",
+    "duration_min": 30,
+    "target_zones": ["Z1"],
+    "equipment_needed": [],
+    "steps": [],
+    "reasoning": "For if athlete feeling slightly off"
+  },
+  "plan_c": {
+    "title": "Indoor primary",
+    "location": "indoor",
+    "sport": "...",
+    "intensity": "Same as plan_a",
+    "duration_min": 35,
+    "target_zones": ["Z1", "Z2"],
+    "equipment_needed": ["trainer", "treadmill"],
+    "steps": [],
+    "reasoning": "Bad weather alternative"
+  },
+  "plan_d": {
+    "title": "Indoor backup (easier)",
+    "location": "indoor",
+    "sport": "...",
+    "intensity": "One level easier",
+    "duration_min": 30,
+    "target_zones": ["Z1"],
+    "equipment_needed": [],
+    "steps": [],
+    "reasoning": "Safest indoor option"
+  },
+  "coach_notes": "Brief motivational message and key advice for today",
+  "listen_to_body": "Specific signals athlete should monitor during workout, when to stop"
+}
+
+IMPORTANT:
+- Duration must be 0-240 minutes
+- sport field MUST be EXACTLY one of these values: run, bike, swim, strength, yoga, hiit, walk, rest (no other values allowed, no plurals, no synonyms)
+- Intensity progression: rest < easy_aerobic < tempo_threshold < hiit
+- NEVER suggest sports in athlete's injury contraindications list
+- Plan B and D must be easier (lower intensity or shorter) than A and C
+- Include specific HR zones or RPE targets in steps
+- Reference actual data in reasoning ("Your HRV is 15% below baseline...")

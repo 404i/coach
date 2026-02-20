@@ -1,0 +1,86 @@
+{
+  "$id": "daily_metrics.v1",
+  "type": "object",
+  "required": ["profile_id", "date", "source", "readiness", "recovery_signals", "subjective", "activities"],
+  "properties": {
+    "profile_id": { "type": "string" },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "source": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["screenshot", "manual", "api"] },
+        "artifacts": { "type": "array", "items": { "type": "string" } },
+        "extraction_confidence_0_1": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "properties": {
+        "garmin_training_readiness": { "type": ["number", "null"] },
+        "training_status_label": { "type": "string" },
+        "acute_load": { "type": ["number", "null"] },
+        "chronic_load": { "type": ["number", "null"] },
+        "load_ratio": { "type": ["number", "null"] }
+      }
+    },
+    "recovery_signals": {
+      "type": "object",
+      "properties": {
+        "resting_hr_bpm": { "type": ["number", "null"] },
+        "hrv_ms": { "type": ["number", "null"] },
+        "sleep_hours": { "type": ["number", "null"] },
+        "stress_score": { "type": ["number", "null"] }
+      }
+    },
+    "subjective": {
+      "type": "object",
+      "required": ["pain_0_10", "fatigue_0_10", "soreness_0_10"],
+      "properties": {
+        "pain_0_10": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "fatigue_0_10": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "soreness_0_10": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "illness_symptoms": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "activities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sport", "duration_min"],
+        "properties": {
+          "sport": { "type": "string" },
+          "duration_min": { "type": "number" },
+          "exercise_load": { "type": ["number", "null"] },
+          "avg_hr_bpm": { "type": ["number", "null"] },
+          "max_hr_bpm": { "type": ["number", "null"] },
+          "training_effect_aerobic": { "type": ["number", "null"] },
+          "training_effect_anaerobic": { "type": ["number", "null"] },
+          "hr_zone_minutes": {
+            "type": "object",
+            "properties": {
+              "z1": { "type": "number" },
+              "z2": { "type": "number" },
+              "z3": { "type": "number" },
+              "z4": { "type": "number" },
+              "z5": { "type": "number" }
+            }
+          },
+          "power_zone_minutes": {
+            "type": ["object", "null"],
+            "properties": {
+              "z1": { "type": "number" },
+              "z2": { "type": "number" },
+              "z3": { "type": "number" },
+              "z4": { "type": "number" },
+              "z5": { "type": "number" },
+              "z6": { "type": "number" },
+              "z7": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

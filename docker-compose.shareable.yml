@@ -1,0 +1,61 @@
+# Docker Compose for Shareable Setup (clean installation)
+version: '3.8'
+
+services:
+  coach:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garmin-ai-coach
+    ports:
+      - "8080:8080"
+    volumes:
+      # User mounts their GarminDB path here
+      - garmindb_data:/app/data/garmin/HealthData
+      # Persistent coach data
+      - coach_data:/app/data
+      # Logs
+      - coach_logs:/app/logs
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - LM_STUDIO_URL=${LM_STUDIO_URL:-http://host.docker.internal:1234/v1}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - TZ=${TZ:-UTC}
+      - PROFILE_ID=${PROFILE_ID:-athlete-1}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MCP Server for Claude Desktop
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garmin-coach-mcp
+    ports:
+      - "3001:3001"
+    volumes:
+      # Share same data with backend
+      - coach_data:/app/data
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - BACKEND_API_URL=http://coach:8080
+      - MCP_PORT=3001
+    command: ["node", "/app/mcp/server.js"]
+    depends_on:
+      - coach
+    restart: unless-stopped
+
+volumes:
+  garmindb_data:
+    driver: local
+  coach_data:
+    driver: local
+  coach_logs:
+    driver: local

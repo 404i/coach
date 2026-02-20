@@ -1,0 +1,93 @@
+Generate a 7-day training plan for the upcoming week based on the athlete's context.
+
+CONTEXT:
+{{CONTEXT}}
+
+PERIODIZATION PRINCIPLES:
+1. WEEK-BY-WEEK ADAPTIVE: Adjust weekly based on compliance and recovery trends. If athlete completing 85%+ and recovering well, progress volume/intensity slightly. If struggling, reduce load.
+
+2. EVENT-DRIVEN: If athlete has race/event scheduled, calculate weeks remaining and assign appropriate phase:
+   - Base Building (12-8 weeks out): High volume Z1/Z2, build aerobic foundation
+   - Build Phase (8-4 weeks out): Introduce race-pace intervals, maintain volume
+   - Peak Phase (4-2 weeks out): Race-specific intensity, reduce volume slightly
+   - Taper (2-0 weeks out): Maintain intensity, reduce volume 40-60%
+
+3. BLOCK PERIODIZATION: 4-week cycles with 3 weeks progressive loading + 1 week deload. Vary emphasis (endurance block → intensity block → mixed block).
+
+ANALYSIS REQUIRED:
+- Planned Activities: Check context.planned_activities - respect athlete's mentioned plans and build the week around them
+- Last 4 weeks compliance and feedback
+- Current fitness trends (CTL/ATL if available)
+- Injury status and contraindications
+- Upcoming events or goals
+- Athlete's preferred training days and time availability
+- Training mode from context (week_by_week|event_driven|block_periodization)
+
+PLANNED ACTIVITIES INTEGRATION:
+- If athlete mentioned specific activities for the week ("yoga tonight", "DH park Saturday", "race next weekend"):
+  → LOCK those days with their planned activity as the primary workout
+  → Adjust surrounding days for optimal prep/recovery
+  → Reference their plans in reasoning ("Building toward your Saturday DH session...")
+- High-priority/committed activities → treat as key sessions, build week around them
+- Social activities → honor them, as consistency matters more than perfect planning
+- Flexible plans → can suggest modifications if recovery indicates different needs
+- Events/races → apply appropriate taper/prep regardless of other planned activities
+
+OUTPUT REQUIREMENTS:
+Return JSON with this EXACT structure:
+
+{
+  "week_summary": {
+    "week_number": 1,
+    "phase": "base_building|build|peak|taper|recovery",
+    "overall_theme": "Brief description of week's focus",
+    "total_planned_volume_min": 240,
+    "key_sessions": ["Tuesday tempo", "Saturday long ride"]
+  },
+  "days": [
+    {
+      "date": "2026-02-17",
+      "day_name": "Monday",
+      "primary_workout": {
+        "sport": "MUST BE EXACTLY ONE OF: run, bike, swim, strength, yoga, hiit, walk, rest",
+        "intensity": "rest|easy_aerobic|tempo_threshold|hiit",
+        "duration_min": 45,
+        "title": "Recovery Run",
+        "brief_description": "Easy aerobic to start week",
+        "target_zones": ["Z1", "Z2"],
+        "estimated_tss": 35
+      },
+      "optional_second_workout": null,
+      "reasoning": "Why this workout on this day"
+    },
+    // ... 6 more days
+  ],
+  "volume_comparison": {
+    "last_week_min": 220,
+    "this_week_min": 240,
+    "change_pct": 9.1,
+    "justification": "Why this change is appropriate"
+  },
+  "hard_days_distribution": {
+    "planned_count": 2,
+    "days": ["Tuesday", "Saturday"],
+    "reasoning": "Adequate recovery between hard sessions"
+  },
+  "injury_accommodations": [
+    "Avoiding running due to knee pain, substituting cycling"
+  ],
+  "coach_message": "Motivational weekly overview with key focus areas",
+  "success_metrics": "What defines a successful week",
+  "flexibility_notes": "Which workouts can be swapped if life happens"
+}
+
+CRITICAL RULES:
+- sport field MUST be EXACTLY one of these values: run, bike, swim, strength, yoga, hiit, walk, rest (no other values, no "running", no "cycling", use exact enum values)
+- Maximum 3 hard days per week (preferably 2)
+- At least 48 hours between hard sessions in same sport
+- Weekly volume increase ≤10% unless athlete in full recovery
+- At least 1 complete rest day per week
+- Respect all injury contraindications
+- If event in <2 weeks → Taper appropriately
+- Hard day pattern: Avoid back-to-back unless athlete very experienced
+- Consider preferred training days from athlete's schedule

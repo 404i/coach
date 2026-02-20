@@ -1,0 +1,123 @@
+Analyze the athlete's current recovery status and determine if any guardrails should be triggered.
+
+CONTEXT:
+{{CONTEXT}}
+
+ASSESSMENT CRITERIA:
+
+1. SLEEP ANALYSIS:
+   - Hours last night vs average
+   - Sleep quality scores if available
+   - Days of insufficient sleep in last week
+
+2. HRV ANALYSIS:
+   - Current HRV vs 7-day baseline
+   - Current HRV vs 14-day baseline  
+   - Trend over last 5-7 days
+   - Days significantly below baseline
+
+3. RHR ANALYSIS:
+   - Current RHR vs 14-day baseline
+   - Trend over last 5-7 days
+   - Days significantly elevated
+
+4. TRAINING READINESS:
+   - Garmin training readiness score if available
+   - Body battery levels
+   - Stress scores
+
+5. SUBJECTIVE MARKERS:
+   - Pain levels (0-10 scale)
+   - Fatigue levels
+   - Soreness patterns
+   - Illness symptoms
+   - Motivation notes
+
+6. TRAINING LOAD:
+   - Acute load (last 7 days)
+   - Chronic load (last 28 days)
+   - Load ratio (acute/chronic)
+   - Consecutive training days
+
+OUTPUT REQUIREMENTS:
+Return JSON with this EXACT structure:
+
+{
+  "overall_status": "excellent|good|marginal|poor|critical",
+  "readiness_score": 7.5,
+  "detailed_analysis": {
+    "sleep": {
+      "status": "good|marginal|poor",
+      "hours_last_night": 7.2,
+      "vs_baseline": "+0.5h",
+      "concerns": []
+    },
+    "hrv": {
+      "status": "good|marginal|poor",
+      "current_value": 45,
+      "baseline_7d": 52,
+      "pct_difference": -13.5,
+      "trend": "declining|stable|improving",
+      "concerns": ["HRV 13% below baseline for 3 consecutive days"]
+    },
+    "rhr": {
+      "status": "good|marginal|poor",
+      "current_value": 56,
+      "baseline_14d": 52,
+      "difference": "+4bpm",
+      "concerns": []
+    },
+    "subjective": {
+      "pain": 2,
+      "fatigue": 5,
+      "soreness": 4,
+      "illness": false,
+      "concerns": []
+    },
+    "training_load": {
+      "acute_load": 580,
+      "chronic_load": 620,
+      "load_ratio": 0.94,
+      "consecutive_days": 3,
+      "concerns": []
+    }
+  },
+  "guardrails": {
+    "force_recovery": false,
+    "block_hiit": false,
+    "reduce_intensity": false,
+    "reasons": []
+  },
+  "recommendations": [
+    "Recovery markers are within normal range",
+    "Safe to proceed with planned training",
+    "Monitor HRV over next 2 days - if continues declining, consider rest day"
+  ],
+  "warning_signs_to_watch": [
+    "Sleep quality dropping",
+    "Persistent elevated RHR",
+    "Increasing pain levels"
+  ],
+  "confidence": 0.85,
+  "reasoning": "Detailed explanation of recovery assessment and why recommendations are appropriate"
+}
+
+GUARDRAIL TRIGGERS (MUST ENFORCE):
+- force_recovery = true IF:
+  * HRV >15% below baseline for 5+ days AND RHR >7bpm elevated
+  * Sleep <5h for 3+ consecutive days AND training readiness <30
+  * Pain ≥7 or illness symptoms present
+  * 7+ consecutive training days
+
+- block_hiit = true IF:
+  * Pain ≥4
+  * HRV >10% below baseline AND readiness <50
+  * 2+ hard days already in last 48h
+  * Load ratio >1.5
+
+- reduce_intensity = true IF:
+  * Training readiness <40 for 3+ days
+  * HRV declining trend for 4+ days (even if not critical yet)
+  * Athlete reports high fatigue (8+/10) multiple days
+
+Be conservative with recovery. When in doubt, prescribe easier training. Athletes lose minimal fitness from one extra rest day, but overtraining can set them back weeks or months.

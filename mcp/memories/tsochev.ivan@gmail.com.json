@@ -1,0 +1,46 @@
+{
+  "email": "tsochev.ivan@gmail.com",
+  "created_at": "2026-02-19T15:18:44.394Z",
+  "updated_at": "2026-02-19T15:18:44.396Z",
+  "name": "",
+  "location": {},
+  "favorite_sports": [],
+  "goals": [],
+  "motivations": [],
+  "constraints": [],
+  "goals_discussed": [],
+  "equipment": [],
+  "facilities": [],
+  "days_per_week": 3,
+  "minutes_per_session": 45,
+  "injuries_conditions": [],
+  "injuries_history": [],
+  "baselines": {},
+  "preferences": {
+    "max_hard_days_per_week": 2,
+    "preferred_training_time": "either",
+    "likes_variety": true
+  },
+  "conversation_history": [
+    {
+      "timestamp": "2026-02-18T12:57:07.074Z",
+      "topic": "Onboarding complete",
+      "summary": "Full onboarding completed based on 4 months of activity data. Key profile: eMTB primary sport with structured indoor cycling (power/HR), swimming becoming regular, indoor climbing. Goal is balanced fitness build - both endurance and intensity. Minor injuries: right shoulder on long rides, left elbow recovering. BP management important. Yoga is a near-daily morning anchor. No upcoming races."
+    }
+  ],
+  "important_notes": [
+    "Minor injury/physical limitation (not limiting training). No upcoming races or events.",
+    "Athlete monitors blood pressure — factor this into intensity recommendations. Avoid sustained very high intensity without adequate recovery. Aerobic/Zone 2 work is particularly valuable for BP management.",
+    "Right shoulder aches on long rides - monitor duration and position on bike. Left elbow took a hit but feels OK during training - watch for flare-ups after hard efforts or crashes.",
+    "FTP = 160W (eMTB isolated power meter, motor-excluded). Manually set estimate — schedule a proper FTP test around mid-April 2026 after current build block.",
+    "Winter-to-spring transition block plan agreed: ~6-8 weeks (Feb-April). Outdoor season starts April. Hard days: Mon/Wed/Sat. Swim 2x/week committed. Yoga daily morning. 1x bodyweight strength per week added. 1x hard indoor intervals mid-week (Wednesday). Semi-structured weekly template. Priority order: eMTB endurance > intensity > recovery > swimming > strength.",
+    "Week of Feb 23: Client visit all week, training will be minimal or zero. Treat as enforced recovery week. Transition block template starts week of March 2.",
+    "Athlete swims breaststroke, not freestyle. All swim workout recommendations must be tailored to breaststroke technique and pacing.",
+    "VO2 max: 51 ml/kg/min (from Garmin Connect, Feb 2026). Good baseline for intermediate endurance athlete.",
+    "Week of Feb 28 - Mar 5: Skiing holiday. No structured training. Counts as active recovery. Transition block template pushed to week of March 9.",
+    "Always use metric system (km, kg, celsius, meters). Week starts on Monday. Never use imperial units."
+  ],
+  "training_philosophy": [],
+  "profile_id": "default",
+  "last_synced_from_db": "2026-02-19T15:18:44.394Z"
+}

@@ -1,0 +1,117 @@
+{
+  "$id": "athlete_profile.v1",
+  "type": "object",
+  "required": [
+    "profile_id",
+    "created_at",
+    "updated_at",
+    "favorite_sports",
+    "access",
+    "injuries_conditions",
+    "baselines",
+    "preferences"
+  ],
+  "properties": {
+    "profile_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "goals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "motivations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "favorite_sports": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["run", "bike", "swim", "strength", "yoga", "hiit", "walk", "other"]
+      },
+      "minItems": 1
+    },
+    "access": {
+      "type": "object",
+      "required": ["equipment", "facilities", "days_per_week", "minutes_per_session"],
+      "properties": {
+        "equipment": { "type": "array", "items": { "type": "string" } },
+        "facilities": { "type": "array", "items": { "type": "string" } },
+        "days_per_week": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "minutes_per_session": { "type": "integer", "minimum": 10, "maximum": 240 }
+      }
+    },
+    "availability": {
+      "type": "object",
+      "properties": {
+        "weekly_minutes_target": { "type": ["number", "null"] },
+        "weekly_schedule": {
+          "type": "object",
+          "properties": {
+            "mon": { "$ref": "#/$defs/day_availability" },
+            "tue": { "$ref": "#/$defs/day_availability" },
+            "wed": { "$ref": "#/$defs/day_availability" },
+            "thu": { "$ref": "#/$defs/day_availability" },
+            "fri": { "$ref": "#/$defs/day_availability" },
+            "sat": { "$ref": "#/$defs/day_availability" },
+            "sun": { "$ref": "#/$defs/day_availability" }
+          }
+        }
+      }
+    },
+    "injuries_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "severity_0_10"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "managed", "historical"] },
+          "severity_0_10": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "contraindications": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "baselines": {
+      "type": "object",
+      "properties": {
+        "resting_hr_bpm_14d": { "type": ["number", "null"] },
+        "hrv_ms_7d": { "type": ["number", "null"] },
+        "lthr_bpm": { "type": ["number", "null"] },
+        "max_hr_bpm": { "type": ["number", "null"] },
+        "ftp_watts": { "type": ["number", "null"] }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "max_hard_days_per_week": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "preferred_training_time": { "type": "string", "enum": ["am", "pm", "either"] },
+        "likes_variety": { "type": "boolean" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "latitude": { "type": ["number", "null"] },
+        "longitude": { "type": ["number", "null"] },
+        "timezone": { "type": "string" }
+      }
+    }
+  },
+  "$defs": {
+    "day_availability": {
+      "type": "object",
+      "properties": {
+        "available": { "type": "boolean" },
+        "minutes": { "type": ["number", "null"] },
+        "preferred_sports": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

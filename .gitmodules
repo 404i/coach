@@ -1,0 +1,3 @@
+[submodule "vendor/GarminDB"]
+	path = vendor/GarminDB
+	url = https://github.com/tcgoetz/GarminDB.git

@@ -1,0 +1,29 @@
+{
+  "name": "coach-demo",
+  "version": "0.1.0",
+  "description": "Training recommendation system with Garmin integration and MCP server",
+  "main": "mcp/server.js",
+  "scripts": {
+    "start": "node scripts/coach_web_server.js",
+    "mcp": "node mcp/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "training",
+    "coach",
+    "garmin",
+    "mcp",
+    "fitness"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

@@ -1,0 +1,83 @@
+# Dependencies
+node_modules/
+.venv/
+.venv-garmin/
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+
+# Personal data (NEVER commit these!)
+data/coach_mcp_store.json
+data/garmin/
+data/*.db
+
+# GarminDB data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+logs/
+data/logs/
+data/.sync-status.json
+data/.sync.lock
+data/.auto-sync-cron.sh
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.history/
+
+# OS
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Garmin credentials (NEVER commit!)
+.garminconnect
+.garth/
+garmin_auth.*
+**/garmin_credentials.*
+.garmin-coach-credentials.enc
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Docker (local only)
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Screenshots with personal data
+screenshots/
+*.png
+*.jpg
+*.jpeg
+!docs/assets/*.png
+!docs/assets/*.jpg
+backend/data/garmin_token.json

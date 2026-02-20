@@ -1,0 +1,27 @@
+{
+  "name": "garmin-ai-coach-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Garmin AI Coach - chat with your AI training coach",
+  "type": "module",
+  "main": "coach-mcp-server.js",
+  "bin": {
+    "garmin-ai-coach-mcp": "./coach-mcp-server.js"
+  },
+  "scripts": {
+    "start": "node coach-mcp-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": [
+    "mcp",
+    "garmin",
+    "ai",
+    "coach",
+    "training",
+    "fitness"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

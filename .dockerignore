@@ -1,0 +1,63 @@
+# Node modules
+node_modules
+backend/node_modules
+npm-debug.log
+package-lock.json
+
+# Git
+.git
+.gitignore
+.github
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Documentation (except essential ones)
+*.md
+!README.md
+!QUICK_REFERENCE.md
+LICENSE
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# GarminDB data (will be mounted as volume)
+data/garmin/HealthData/DBs/*.db
+data/garmin/HealthData/FitFiles/**
+data/coach_mcp_store.json
+
+# Vendor (GarminDB source is copied explicitly)
+vendor/GarminDB/.git
+vendor/GarminDB/test
+vendor/GarminDB/Screenshots
+vendor/GarminDB/Jupyter
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+coverage/
+.nyc_output/
+dist/
+build/
+
+# Docker files
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp
