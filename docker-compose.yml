@@ -20,6 +20,7 @@ services:
       - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
       - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
       - GARMIN_ACTIVITY_DB_PATH=${GARMIN_ACTIVITY_DB_PATH:-/app/data/garmin/HealthData/DBs/garmin_activities.db}
+      - DB_PATH=/app/data/coach.db
       - TZ=${TZ:-UTC}
     restart: unless-stopped
     extra_hosts:
