@@ -24,7 +24,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 SERVER="mithrandir.404i"
 MCP_PORT=3001
-BACKEND_PORT=8080
+BACKEND_PORT=8088
 
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; RED='\033[0;31m'; NC='\033[0m'
 info()    { echo -e "${BLUE}▶ $*${NC}"; }
