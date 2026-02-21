@@ -14,8 +14,8 @@
     },
 
     "garmin-ai-coach": {
-      "_comment": "Use when connecting from any machine on your LAN. Replace YOUR_SERVER_IP and YOUR_MCP_AUTH_TOKEN.",
-      "url": "http://YOUR_SERVER_IP:3001/mcp",
+      "_comment": "Connects to the MCP server running on mithrandir.404i. Replace YOUR_MCP_AUTH_TOKEN with the value from ~/coach/.env on the server.",
+      "url": "http://mithrandir.404i:3001/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_MCP_AUTH_TOKEN_HERE"
       }
