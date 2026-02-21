@@ -431,7 +431,8 @@ async function appendToMemoryArray(email, arrayKey, item) {
   return await writeMemory(email, memory);
 }
 
-// Create MCP server
+// Create a fresh MCP server instance per SSE session to avoid shared-transport collisions
+function createMCPServer() {
 const server = new Server(
   {
     name: "garmin-ai-coach",
@@ -2806,6 +2807,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+  return server;
+} // end createMCPServer()
+
 // ─── HTTP / SSE mode ──────────────────────────────────────────────────────────
 async function startHttpServer() {
   const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
@@ -2905,7 +2909,8 @@ async function startHttpServer() {
     };
 
     try {
-      await server.connect(transport);
+      const sessionServer = createMCPServer();
+      await sessionServer.connect(transport);
       console.error(`[MCP] Session opened: ${transport._sessionId} from ${(req.ip || '').replace('::ffff:', '')}`);
     } catch (err) {
       activeSessions.delete(transport._sessionId);
@@ -2948,7 +2953,7 @@ async function main() {
     await startHttpServer();
   } else {
     const transport = new StdioServerTransport();
-    await server.connect(transport);
+    await createMCPServer().connect(transport);
     console.error('Garmin AI Coach MCP server running on stdio');
   }
 }
