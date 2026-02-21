@@ -8,10 +8,12 @@
     "garmin-ai-coach-mcp": "./coach-mcp-server.js"
   },
   "scripts": {
-    "start": "node coach-mcp-server.js"
+    "start": "node coach-mcp-server.js",
+    "serve": "MCP_HTTP_MODE=true node coach-mcp-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
+    "express": "^5.2.1",
     "node-fetch": "^3.3.2"
   },
   "keywords": [

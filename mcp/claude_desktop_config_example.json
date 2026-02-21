@@ -1,13 +1,25 @@
 {
+  "_comment": "Claude Desktop MCP configuration for Garmin AI Coach. Copy the relevant block into ~/Library/Application Support/Claude/claude_desktop_config.json",
+  "_modes": "stdio = local machine only (no auth needed) | sse = local network (auth token required)",
+
   "mcpServers": {
-    "garmin-ai-coach": {
+
+    "_option_A_stdio_local": {
+      "_comment": "Use when Claude Desktop runs on the SAME machine as the coach Docker stack",
       "command": "node",
-      "args": [
-        "/Users/tsochkata/git/coach/mcp/coach-mcp-server.js"
-      ],
+      "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
       "env": {
         "COACH_API_URL": "http://localhost:8080"
       }
+    },
+
+    "garmin-ai-coach": {
+      "_comment": "Use when connecting from any machine on your LAN. Replace YOUR_SERVER_IP and YOUR_MCP_AUTH_TOKEN.",
+      "url": "http://YOUR_SERVER_IP:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_MCP_AUTH_TOKEN_HERE"
+      }
     }
+
   }
 }

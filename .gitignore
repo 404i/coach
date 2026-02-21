@@ -12,6 +12,10 @@ node_modules/
 data/coach_mcp_store.json
 data/garmin/
 data/*.db
+backend/data/garmin_token.json
+
+# MCP memories (personal coaching data)
+mcp/memories/
 
 # GarminDB data
 *.db
@@ -80,4 +84,3 @@ screenshots/
 *.jpeg
 !docs/assets/*.png
 !docs/assets/*.jpg
-backend/data/garmin_token.json

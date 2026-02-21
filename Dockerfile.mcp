@@ -1,0 +1,30 @@
+# ─── MCP HTTP Server ─────────────────────────────────────────────────────────
+# Runs the MCP server in HTTP/SSE mode so Claude Desktop (or any MCP client)
+# can reach it over the local network with Bearer-token authentication.
+
+FROM node:20-alpine
+
+# Non-root user for least-privilege execution
+RUN addgroup -S mcp && adduser -S mcp -G mcp
+
+WORKDIR /app/mcp
+
+# Install dependencies first (layer caching)
+COPY mcp/package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy MCP source
+COPY mcp/coach-mcp-server.js ./
+COPY mcp/coach-system-prompt.md ./
+
+# Create memories directory (persists via volume)
+RUN mkdir -p memories && chown -R mcp:mcp /app/mcp
+
+USER mcp
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+
+CMD ["node", "coach-mcp-server.js"]

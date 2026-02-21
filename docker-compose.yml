@@ -33,6 +33,38 @@ services:
       retries: 3
       start_period: 10s
 
+  # ── MCP HTTP Server ──────────────────────────────────────────────────────────
+  # Exposes the MCP server over SSE on the local network with bearer-token auth.
+  # Requires MCP_AUTH_TOKEN in your .env (generate: openssl rand -hex 32)
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: garmin-ai-coach-mcp
+    ports:
+      - "${MCP_BIND_HOST:-0.0.0.0}:${MCP_PORT:-3001}:3001"
+    volumes:
+      - ./mcp/memories:/app/mcp/memories
+    environment:
+      - MCP_HTTP_MODE=true
+      - MCP_PORT=3001
+      - MCP_BIND_HOST=0.0.0.0
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
+      - MCP_RATE_LIMIT=${MCP_RATE_LIMIT:-60}
+      - MCP_ALLOWED_IPS=${MCP_ALLOWED_IPS:-}
+      - COACH_API_URL=http://coach:8080
+      - TZ=${TZ:-UTC}
+    depends_on:
+      coach:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Development frontend (optional, comment out in production)
   frontend-dev:
     image: node:20-alpine
