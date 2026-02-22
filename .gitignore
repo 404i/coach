@@ -84,3 +84,4 @@ screenshots/
 *.jpeg
 !docs/assets/*.png
 !docs/assets/*.jpg
+mcp/.coach-mcp-state.json
