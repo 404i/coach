@@ -12,20 +12,22 @@ const garminActivityDbPath = process.env.GARMIN_ACTIVITY_DB_PATH ||
 
 /**
  * Query GarminDB for activities
+ * Returns empty array if the DB file doesn't exist (e.g. server without GarminDB sync)
  */
 async function queryGarminActivities(query, params = []) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const garminDb = new sqlite3.Database(garminActivityDbPath, sqlite3.OPEN_READONLY, (err) => {
       if (err) {
-        logger.error('Error opening GarminDB:', err);
-        return reject(err);
+        // DB doesn't exist or can't be opened — degrade gracefully
+        logger.warn(`GarminDB not available at ${garminActivityDbPath}, skipping activity query: ${err.message}`);
+        return resolve([]);
       }
       
       garminDb.all(query, params, (err, rows) => {
         garminDb.close();
         if (err) {
           logger.error('Error querying GarminDB:', err);
-          return reject(err);
+          return resolve([]);
         }
         resolve(rows || []);
       });
