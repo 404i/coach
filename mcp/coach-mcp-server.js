@@ -32,8 +32,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const MEMORIES_DIR = path.join(__dirname, 'memories');
 const SYSTEM_PROMPT_PATH = path.join(__dirname, 'coach-system-prompt.md');
+const STATE_FILE = path.join(__dirname, '.coach-mcp-state.json');
 
 const API_BASE_URL = process.env.COACH_API_URL || 'http://localhost:8080';
+
+// ─── Process-level crash guards ──────────────────────────────────────────────
+// Prevent the MCP server from exiting on unhandled errors — losing all session
+// state and forcing Claude Desktop to restart the process mid-conversation.
+process.on('uncaughtException', (err) => {
+  console.error('[MCP] Uncaught exception (server kept alive):', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[MCP] Unhandled rejection (server kept alive):', reason?.message || reason);
+});
 
 // Date/time context utility
 function getDateTimeContext() {
@@ -62,6 +73,7 @@ async function loadSystemPrompt() {
   }
 }
 await loadSystemPrompt();
+await loadAthleteState();
 
 // Helper to call backend API
 async function callAPI(endpoint, options = {}) {
@@ -249,7 +261,29 @@ async function addVerificationContext(email, responseData) {
 }
 
 // Session state - stores current athlete context
+// Persisted to STATE_FILE so it survives server restarts (e.g. crashes/updates)
 let currentAthleteEmail = null;
+
+async function loadAthleteState() {
+  try {
+    const raw = await fs.readFile(STATE_FILE, 'utf-8');
+    const state = JSON.parse(raw);
+    if (state.currentAthleteEmail) {
+      currentAthleteEmail = state.currentAthleteEmail;
+      console.error(`[MCP] Restored athlete context: ${currentAthleteEmail}`);
+    }
+  } catch {
+    // State file missing or corrupt — start fresh, that's fine
+  }
+}
+
+async function saveAthleteState() {
+  try {
+    await fs.writeFile(STATE_FILE, JSON.stringify({ currentAthleteEmail }, null, 2));
+  } catch (err) {
+    console.error('[MCP] Warning: could not persist athlete state:', err.message);
+  }
+}
 
 function getCurrentAthlete() {
   if (!currentAthleteEmail) {
@@ -1438,6 +1472,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "set_current_athlete": {
         currentAthleteEmail = args.email;
+        await saveAthleteState();
         // Verify the athlete exists
         const data = await callAPI(`/api/profile?email=${encodeURIComponent(args.email)}`);
         const datetime = getDateTimeContext();
@@ -2959,6 +2994,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Server error:', error);
+  console.error('[MCP] Fatal startup error:', error);
   process.exit(1);
 });
