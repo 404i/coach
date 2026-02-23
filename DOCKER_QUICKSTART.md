@@ -55,49 +55,43 @@ docker-compose -f docker-compose.shareable.yml up -d
 
 ---
 
-## Distribution Package
+## Distribution
 
-To share the application:
-
-```bash
-# 1. Build shareable image
-docker-compose -f docker-compose.shareable.yml build
-
-# 2. Export image
-docker save garmin-ai-coach:latest | gzip > garmin-coach-image.tar.gz
-
-# 3. Create distribution package
-tar -czf garmin-coach-v1.0.tar.gz \
-  garmin-coach-image.tar.gz \
-  docker-compose.shareable.yml \
-  docker-setup.sh \
-  DOCKER_DEPLOYMENT.md \
-  README.md \
-  .env.example
-
-# 4. Share garmin-coach-v1.0.tar.gz (no personal data included!)
-```
-
-## For Recipients
-
-When someone receives your distribution:
+The image is published on Docker Hub — recipients just need:
 
 ```bash
-# 1. Extract
-tar -xzf garmin-coach-v1.0.tar.gz
+# 1. Pull the image
+docker pull 404i/garmin-coach-ai:latest
 
-# 2. Load image
-docker load < garmin-coach-image.tar.gz
-
-# 3. Configure
+# 2. Configure
 cp .env.example .env
 nano .env  # Set GARMINDB_PATH to your GarminDB location
 
-# 4. Run
-./docker-setup.sh shareable
+# 3. Run
+docker-compose -f docker-compose.shareable.yml up -d
+```
 
-# 5. Import your data
-docker-compose -f docker-compose.shareable.yml exec coach \
+Docker Hub: https://hub.docker.com/r/404i/garmin-coach-ai
+
+## For New Users
+
+Getting started without cloning the repo:
+
+```bash
+# 1. Download the compose file
+curl -O https://raw.githubusercontent.com/404i/coach/main/docker-compose.shareable.yml
+curl -O https://raw.githubusercontent.com/404i/coach/main/.env.example
+
+# 2. Configure
+cp .env.example .env
+nano .env  # Set GARMINDB_PATH to your GarminDB location
+
+# 3. Pull and run (no build needed)
+docker compose -f docker-compose.shareable.yml pull
+docker compose -f docker-compose.shareable.yml up -d
+
+# 4. Import your data
+docker compose -f docker-compose.shareable.yml exec coach \
   python3 /app/scripts/import_garmindb_to_coach.py \
   --profile-id YOUR-NAME --latest-days 30
 ```

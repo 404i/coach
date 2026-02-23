@@ -3,9 +3,7 @@ version: '3.8'
 
 services:
   coach:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: 404i/garmin-coach-ai:latest
     container_name: garmin-ai-coach
     ports:
       - "8080:8080"

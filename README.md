@@ -1,8 +1,8 @@
 # Garmin AI Coach
 
-[![Docker Build](https://github.com/YOUR_USERNAME/coach/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/YOUR_USERNAME/coach/actions/workflows/docker-publish.yml)
+[![Docker Build](https://github.com/404i/coach/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/404i/coach/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Pulls](https://img.shields.io/docker/pulls/YOUR_USERNAME/garmin-ai-coach)](https://hub.docker.com/r/YOUR_USERNAME/garmin-ai-coach)
+[![Docker Pulls](https://img.shields.io/docker/pulls/404i/garmin-coach-ai)](https://hub.docker.com/r/404i/garmin-coach-ai)
 
 An AI-powered training coach that integrates with GarminDB to provide personalized workout recommendations, activity verification, and comprehensive training insights.
 
@@ -420,16 +420,14 @@ GARMIN_START_DATE="01/01/2024" \
 - ⏳ **No OCR extraction yet** - screenshot values must be typed manually
 - ⏳ **Rule-based recommendations** - LLM integration for conversational responses only
 
-## Docker Hub / GitHub Container Registry
-
-Once published, pull the image:
+## Docker Hub
 
 ```bash
-# From GitHub Container Registry
-docker pull ghcr.io/YOUR_USERNAME/coach:latest
+# Pull from Docker Hub (recommended)
+docker pull 404i/garmin-coach-ai:latest
 
 # Or build locally
-docker build -t garmin-ai-coach .
+docker build -t 404i/garmin-coach-ai .
 ```
 
 ## System Requirements
