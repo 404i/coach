@@ -40,7 +40,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && secrets.DOCKERHUB_TOKEN != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -69,7 +69,9 @@ jobs:
           file: ./Dockerfile
           push: false
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            garmin-coach-ai:ci-test
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -78,7 +80,7 @@ jobs:
         run: |
           docker run --rm -d --name test-container \
             -p 8080:8080 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            garmin-coach-ai:ci-test
           
           # Wait for container to be healthy
           timeout 30 bash -c 'until docker exec test-container node -e "require(\"http\").get(\"http://localhost:8080/api/health\", (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"; do sleep 2; done'
