@@ -5,6 +5,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Upgrade npm to get patched bundled dependencies (cross-spawn, minimatch, etc.)
+RUN npm install -g npm@latest
+
 # Install Python, SQLite, and build tools for GarminDB
 RUN apk add --no-cache \
     python3 \
