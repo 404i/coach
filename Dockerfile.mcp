@@ -16,6 +16,7 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy MCP source
 COPY mcp/coach-mcp-server.js ./
 COPY mcp/coach-system-prompt.md ./
+COPY mcp/lib/ ./lib/
 
 # Create memories directory (persists via volume)
 RUN mkdir -p memories && chown -R mcp:mcp /app/mcp
