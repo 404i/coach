@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import WeeklyPlan from './components/WeeklyPlan';
 import Statistics from './components/Statistics';
 import Onboarding from './components/Onboarding';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('daily');
@@ -94,9 +95,11 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {currentView === 'daily' && <Dashboard profileId={profile.profile_id} />}
-        {currentView === 'weekly' && <WeeklyPlan profileId={profile.profile_id} />}
-        {currentView === 'stats' && <Statistics profileId={profile.profile_id} email={profile.email} />}
+        <ErrorBoundary>
+          {currentView === 'daily' && <Dashboard profileId={profile.profile_id} />}
+          {currentView === 'weekly' && <WeeklyPlan profileId={profile.profile_id} />}
+          {currentView === 'stats' && <Statistics profileId={profile.profile_id} email={profile.email} />}
+        </ErrorBoundary>
       </main>
     </div>
   );

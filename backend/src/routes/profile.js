@@ -2,6 +2,7 @@ import express from 'express';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { syncDateRange } from '../services/garmin-sync.js';
+import { storeEncryptedCredentials } from '../services/auth-improved.js';
 
 const router = express.Router();
 
@@ -58,23 +59,31 @@ router.post('/', async (req, res) => {
     // Generate profile_id from email
     const profileId = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '_');
 
+    // Extract structured fields from preferences if present
+    const extractedName = name || preferences?.name || null;
+    const extractedFavoriteSports = favorite_sports || preferences?.favorite_sports || [];
+    const extractedGoals = goals || preferences?.goals || [];
+    const extractedMotivations = motivations || preferences?.motivations || [];
+    const extractedInjuries = injuries_conditions || preferences?.injuries_conditions || [];
+    const extractedTrainingGoals = preferences?.training_goals || [];
+
     // Build profile data matching athlete_profile.v1.json schema
     const profileData = {
       profile_id: profileId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      name,
-      goals: goals || [],
-      motivations: motivations || [],
+      name: extractedName,
+      goals: extractedGoals,
+      motivations: extractedMotivations,
       constraints: constraints || [],
-      favorite_sports,
+      favorite_sports: extractedFavoriteSports,
       access: {
         equipment: access?.equipment || [],
         facilities: access?.facilities || [],
         days_per_week: access?.days_per_week || 3,
         minutes_per_session: access?.minutes_per_session || 45
       },
-      injuries_conditions: injuries_conditions || [],
+      injuries_conditions: extractedInjuries,
       baselines: {
         resting_hr_bpm_14d: baselines?.resting_hr_bpm_14d || null,
         hrv_ms_7d: baselines?.hrv_ms_7d || null,
@@ -83,11 +92,13 @@ router.post('/', async (req, res) => {
         ftp_watts: baselines?.ftp_watts || null
       },
       preferences: {
+        ...preferences,
         max_hard_days_per_week: preferences?.max_hard_days_per_week || 2,
         preferred_training_time: preferences?.preferred_training_time || 'either',
         likes_variety: preferences?.likes_variety !== undefined ? preferences.likes_variety : true
       },
-      location: location || {}
+      location: location || {},
+      training_goals: extractedTrainingGoals
     };
 
     // Check if profile already exists
@@ -96,15 +107,24 @@ router.post('/', async (req, res) => {
       .first();
 
     let profile;
+    // Prepare update/insert fields for structured columns
+    const structuredFields = {
+      name_display: extractedName,
+      favorite_sports: JSON.stringify(extractedFavoriteSports),
+      goals: JSON.stringify(extractedGoals),
+      motivations: JSON.stringify(extractedMotivations),
+      injuries_conditions: JSON.stringify(extractedInjuries),
+      training_goals: JSON.stringify(extractedTrainingGoals)
+    };
     if (existingProfile) {
       // Update existing profile
       await db('athlete_profiles')
         .where({ id: existingProfile.id })
         .update({
           profile_data: JSON.stringify(profileData),
-          updated_at: db.fn.now()
+          updated_at: db.fn.now(),
+          ...structuredFields
         });
-      
       profile = {
         id: existingProfile.id,
         user_id: userId,
@@ -112,16 +132,15 @@ router.post('/', async (req, res) => {
         email: email,
         ...profileData
       };
-      
       logger.info('Updated existing profile', { profileId });
     } else {
       // Create new profile
       const [profileDbId] = await db('athlete_profiles').insert({
         user_id: userId,
         profile_id: profileId,
-        profile_data: JSON.stringify(profileData)
+        profile_data: JSON.stringify(profileData),
+        ...structuredFields
       });
-
       profile = {
         id: profileDbId,
         user_id: userId,
@@ -129,7 +148,6 @@ router.post('/', async (req, res) => {
         email: email,
         ...profileData
       };
-
       logger.info('Created new profile', { profileId, profileDbId });
     }
 
@@ -147,11 +165,11 @@ router.post('/', async (req, res) => {
         
         if (authResult.mfa_required) {
           logger.info('MFA required for Garmin login');
-          // Store temporary credentials for MFA completion
+          // Store encrypted credentials; mark session as MFA-pending (no plaintext password)
+          await storeEncryptedCredentials(garmin_email, garmin_password);
           await db('users').where({ id: userId }).update({
             garth_session: JSON.stringify({
               email: garmin_email,
-              password: garmin_password,
               mfa_required: true,
               authenticated_at: new Date().toISOString()
             })
@@ -171,16 +189,9 @@ router.post('/', async (req, res) => {
         }
       } catch (syncError) {
         logger.error('Garmin authentication/sync failed during onboarding', syncError);
-        // Store credentials anyway for later re-auth
+        // Store encrypted credentials for later re-auth (no plaintext password persisted)
         try {
-          await db('users').where({ id: userId }).update({
-            garth_session: JSON.stringify({
-              email: garmin_email,
-              password: garmin_password,
-              error: syncError.message,
-              authenticated_at: new Date().toISOString()
-            })
-          });
+          await storeEncryptedCredentials(garmin_email, garmin_password);
         } catch (dbError) {
           logger.error('Failed to store credentials after auth error', dbError);
         }
@@ -231,7 +242,12 @@ router.get('/', async (req, res) => {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    const profileData = JSON.parse(profile.profile_data);
+    let profileData = {};
+    try {
+      profileData = profile.profile_data ? JSON.parse(profile.profile_data) : {};
+    } catch {
+      logger.error('Failed to parse profile_data for profile', profile.id);
+    }
 
     res.json({
       success: true,
@@ -273,18 +289,47 @@ router.put('/', async (req, res) => {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    const currentData = JSON.parse(profile.profile_data);
+    let currentData = {};
+    try {
+      currentData = profile.profile_data ? JSON.parse(profile.profile_data) : {};
+    } catch {
+      logger.error('Failed to parse profile_data for profile', profile.id);
+    }
+    // Extract structured fields from updates or preferences
+    const updatedName = updates.name || updates.preferences?.name || currentData.name || null;
+    const updatedFavoriteSports = updates.favorite_sports || updates.preferences?.favorite_sports || currentData.favorite_sports || [];
+    const updatedGoals = updates.goals || updates.preferences?.goals || currentData.goals || [];
+    const updatedMotivations = updates.motivations || updates.preferences?.motivations || currentData.motivations || [];
+    const updatedInjuries = updates.injuries_conditions || updates.preferences?.injuries_conditions || currentData.injuries_conditions || [];
+    const updatedTrainingGoals = updates.training_goals || updates.preferences?.training_goals || currentData.training_goals || [];
+
     const updatedData = {
       ...currentData,
       ...updates,
+      name: updatedName,
+      favorite_sports: updatedFavoriteSports,
+      goals: updatedGoals,
+      motivations: updatedMotivations,
+      injuries_conditions: updatedInjuries,
+      training_goals: updatedTrainingGoals,
       updated_at: new Date().toISOString()
+    };
+
+    const structuredFields = {
+      name_display: updatedName,
+      favorite_sports: JSON.stringify(updatedFavoriteSports),
+      goals: JSON.stringify(updatedGoals),
+      motivations: JSON.stringify(updatedMotivations),
+      injuries_conditions: JSON.stringify(updatedInjuries),
+      training_goals: JSON.stringify(updatedTrainingGoals)
     };
 
     await db('athlete_profiles')
       .where({ id: profile.id })
       .update({
         profile_data: JSON.stringify(updatedData),
-        updated_at: db.fn.now()
+        updated_at: db.fn.now(),
+        ...structuredFields
       });
 
     res.json({

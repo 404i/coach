@@ -38,7 +38,7 @@ router.get('/entries', async (req, res) => {
     const options = {
       startDate: req.query.start_date,
       endDate: req.query.end_date,
-      limit: req.query.limit ? parseInt(req.query.limit) : undefined
+      limit: req.query.limit ? Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 1000) : undefined
     };
 
     const entries = await getDiaryEntries(email, options);
@@ -77,7 +77,7 @@ router.get('/analysis', async (req, res) => {
       return res.status(400).json({ error: 'Email parameter is required' });
     }
 
-    const days = req.query.days ? parseInt(req.query.days) : 60;
+    const days = req.query.days ? Math.min(Math.max(parseInt(req.query.days), 1), 365) : 60;
     const analysis = await analyzeDiaryPatterns(email, days);
     res.json(analysis);
   } catch (error) {

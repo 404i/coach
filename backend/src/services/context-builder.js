@@ -2,6 +2,7 @@ import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { startOfWeek, subDays, format, addDays } from 'date-fns';
 import { getUpcomingActivities } from './planned-activities.js';
+import { estimateObjectTokens, TOKEN_BUDGET } from '../utils/token-estimator.js';
 
 /**
  * Build comprehensive context for LLM coaching decisions
@@ -329,4 +330,97 @@ export async function buildWeeklyContext(profileId, weekStartDate) {
     logger.error(`Failed to build weekly context for ${profileId}:`, error);
     throw error;
   }
+}
+
+/**
+ * Split daily context into ordered chunks for multi-turn LLM calls.
+ * If the full context fits within the token budget, returns a single chunk.
+ * Otherwise splits into:
+ *   Chunk 1: profile + today + planned_activities + constraints
+ *   Chunk 2: recent_history (7d) + trends
+ *   Chunk 3: full_history (days 8-14) + patterns + current_week + training_mode
+ *
+ * Each chunk carries chunkIndex and totalChunks for the LLM caller.
+ */
+export async function buildChunkedDailyContext(profileId, date) {
+  const fullContext = await buildDailyContext(profileId, date);
+  const estimatedTokens = estimateObjectTokens(fullContext);
+
+  logger.info(`Daily context for ${profileId}: ~${estimatedTokens} tokens (budget: ${TOKEN_BUDGET})`);
+
+  if (estimatedTokens <= TOKEN_BUDGET) {
+    return [{ ...fullContext, chunkIndex: 1, totalChunks: 1 }];
+  }
+
+  // Split into 3 priority-ordered chunks
+  const chunk1 = {
+    date: fullContext.date,
+    profile: fullContext.profile,
+    today: fullContext.today,
+    planned_activities: fullContext.planned_activities,
+    constraints: fullContext.constraints,
+    chunkIndex: 1,
+    totalChunks: 3,
+  };
+
+  const chunk2 = {
+    date: fullContext.date,
+    recent_history: fullContext.recent_history,
+    trends: fullContext.trends,
+    chunkIndex: 2,
+    totalChunks: 3,
+  };
+
+  const chunk3 = {
+    date: fullContext.date,
+    full_history: fullContext.full_history?.slice(0, -7) || [], // days 8-14 only
+    patterns: fullContext.patterns,
+    current_week: fullContext.current_week,
+    training_mode: fullContext.training_mode,
+    chunkIndex: 3,
+    totalChunks: 3,
+  };
+
+  return [chunk1, chunk2, chunk3];
+}
+
+/**
+ * Split weekly context into ordered chunks for multi-turn LLM calls.
+ */
+export async function buildChunkedWeeklyContext(profileId, weekStartDate) {
+  const fullContext = await buildWeeklyContext(profileId, weekStartDate);
+  const estimatedTokens = estimateObjectTokens(fullContext);
+
+  logger.info(`Weekly context for ${profileId}: ~${estimatedTokens} tokens (budget: ${TOKEN_BUDGET})`);
+
+  if (estimatedTokens <= TOKEN_BUDGET) {
+    return [{ ...fullContext, chunkIndex: 1, totalChunks: 1 }];
+  }
+
+  const chunk1 = {
+    week_start: fullContext.week_start,
+    profile: fullContext.profile,
+    training_mode: fullContext.training_mode,
+    planned_activities: fullContext.planned_activities,
+    chunkIndex: 1,
+    totalChunks: 3,
+  };
+
+  const chunk2 = {
+    week_start: fullContext.week_start,
+    recent_metrics: fullContext.recent_metrics?.slice(-7) || [],
+    patterns: fullContext.patterns,
+    chunkIndex: 2,
+    totalChunks: 3,
+  };
+
+  const chunk3 = {
+    week_start: fullContext.week_start,
+    last_4_weeks: fullContext.last_4_weeks,
+    recent_metrics: fullContext.recent_metrics?.slice(0, -7) || [],
+    chunkIndex: 3,
+    totalChunks: 3,
+  };
+
+  return [chunk1, chunk2, chunk3];
 }

@@ -15,7 +15,13 @@ import { loginGarmin, submitMFA, validateSession } from './garmin-sync.js';
 
 // Encryption settings
 const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || null;
+if (!ENCRYPTION_KEY) {
+  logger.warn(
+    'ENCRYPTION_KEY not set — Garmin credential encryption is disabled. ' +
+    'Generate one with: openssl rand -hex 32'
+  );
+}
 const IV_LENGTH = 16;
 const SALT_LENGTH = 64;
 const TAG_LENGTH = 16;
@@ -24,12 +30,16 @@ const TAG_LENGTH = 16;
  * Encrypt sensitive data (like passwords)
  */
 function encrypt(text) {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY is required for credential encryption. Set it in .env');
+  }
   try {
-    // Generate a random initialization vector
+    // Generate a random salt and IV per encryption operation
+    const salt = crypto.randomBytes(SALT_LENGTH);
     const iv = crypto.randomBytes(IV_LENGTH);
     
-    // Create key from encryption key
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    // Derive key using the random salt (NOT a hardcoded string)
+    const key = crypto.scryptSync(ENCRYPTION_KEY, salt, 32);
     
     // Create cipher
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -41,8 +51,8 @@ function encrypt(text) {
     // Get auth tag
     const authTag = cipher.getAuthTag();
     
-    // Return iv + authTag + encrypted data
-    return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
+    // Return salt + iv + authTag + encrypted data (4-part format)
+    return salt.toString('hex') + ':' + iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
   } catch (error) {
     logger.error('Encryption error:', error);
     throw new Error('Failed to encrypt data');
@@ -53,19 +63,33 @@ function encrypt(text) {
  * Decrypt sensitive data
  */
 function decrypt(encryptedData) {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY is required for credential decryption. Set it in .env');
+  }
   try {
-    // Split the data
     const parts = encryptedData.split(':');
-    if (parts.length !== 3) {
+    
+    let salt, iv, authTag, encrypted;
+    
+    if (parts.length === 4) {
+      // New 4-part format: salt:iv:authTag:encrypted
+      salt = Buffer.from(parts[0], 'hex');
+      iv = Buffer.from(parts[1], 'hex');
+      authTag = Buffer.from(parts[2], 'hex');
+      encrypted = parts[3];
+    } else if (parts.length === 3) {
+      // Legacy 3-part format: iv:authTag:encrypted (hardcoded salt)
+      logger.warn('Decrypting legacy format (hardcoded salt) — re-encrypt to upgrade');
+      salt = Buffer.from('salt');
+      iv = Buffer.from(parts[0], 'hex');
+      authTag = Buffer.from(parts[1], 'hex');
+      encrypted = parts[2];
+    } else {
       throw new Error('Invalid encrypted data format');
     }
     
-    const iv = Buffer.from(parts[0], 'hex');
-    const authTag = Buffer.from(parts[1], 'hex');
-    const encrypted = parts[2];
-    
-    // Create key from encryption key
-    const key = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+    // Derive key using the stored salt
+    const key = crypto.scryptSync(ENCRYPTION_KEY, salt, 32);
     
     // Create decipher
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);

@@ -265,7 +265,7 @@ router.get('/activities', async (req, res) => {
     
     query = query
       .orderBy('start_time', 'desc')
-      .limit(parseInt(limit));
+      .limit(Math.min(Math.max(parseInt(limit) || 50, 1), 500));
     
     const activities = await query;
     
@@ -286,6 +286,121 @@ router.get('/activities', async (req, res) => {
       error: 'Failed to fetch activities',
       message: error.message
     });
+  }
+});
+
+/**
+ * POST /api/garmin/import
+ * Bulk-upsert daily metrics from an external source (e.g. import_garmindb_to_coach.py).
+ *
+ * Body: { email: string, days: DailyMetricsObject[], overwrite?: boolean }
+ * Each element of `days` is stored verbatim as metrics_data JSON, keyed by (profile_id, date).
+ * If `overwrite` is false (default true), existing rows are left untouched.
+ *
+ * Returns: { success, upserted, skipped, total }
+ */
+router.post('/import', async (req, res) => {
+  try {
+    const { email, days, overwrite = true } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'email required' });
+    }
+    if (!Array.isArray(days) || days.length === 0) {
+      return res.status(400).json({ error: 'days array required and must be non-empty' });
+    }
+
+    const user = await db('users').where({ garmin_email: email }).first();
+    if (!user) {
+      return res.status(404).json({ error: `User not found: ${email}` });
+    }
+
+    let upserted = 0;
+    let skipped = 0;
+
+    // Pre-fetch existing dates in one query to avoid N+1 when overwrite=false
+    let existingDates = new Set();
+    if (!overwrite) {
+      const validDates = days.map(d => d.date).filter(Boolean);
+      if (validDates.length > 0) {
+        const rows = await db('daily_metrics')
+          .where({ profile_id: user.id })
+          .whereIn('date', validDates)
+          .select('date');
+        existingDates = new Set(rows.map(r => r.date));
+      }
+    }
+
+    for (const day of days) {
+      const date = day.date;
+      if (!date) continue;
+
+      if (!overwrite && existingDates.has(date)) {
+        skipped++;
+        continue;
+      }
+
+      await db('daily_metrics')
+        .insert({
+          profile_id: user.id,
+          date,
+          metrics_data: JSON.stringify(day),
+          synced_at: db.fn.now(),
+          updated_at: db.fn.now()
+        })
+        .onConflict(['profile_id', 'date'])
+        .merge(['metrics_data', 'synced_at', 'updated_at']);
+
+      upserted++;
+    }
+
+    logger.info(`GarminDB import complete for ${email}: upserted=${upserted}, skipped=${skipped}`);
+
+    res.json({
+      success: true,
+      email,
+      upserted,
+      skipped,
+      total: days.length
+    });
+  } catch (error) {
+    logger.error('Failed to import daily metrics:', error);
+    res.status(500).json({
+      error: 'Failed to import daily metrics',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/garmin/last-sync?email=
+// Returns the most recent synced_at timestamp from daily_metrics for a user.
+// Used by the MCP server to decide whether a fresh sync is needed.
+router.get('/last-sync', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
+    }
+
+    const user = await db('users').where({ garmin_email: email }).first();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const row = await db('daily_metrics')
+      .where({ profile_id: user.id })
+      .whereNotNull('synced_at')
+      .orderBy('synced_at', 'desc')
+      .select('synced_at')
+      .first();
+
+    res.json({
+      email,
+      last_sync: row ? row.synced_at : null
+    });
+  } catch (error) {
+    logger.error('Failed to get last sync time:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

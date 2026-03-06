@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { fileURLToPath } from 'url';
@@ -30,6 +31,7 @@ import healthRoutes from './routes/health.js';
 import patternsRoutes from './routes/patterns.js';
 import helpRoutes from './routes/help.js';
 import plannedActivitiesRoutes from './routes/planned-activities.js';
+import memoryRoutes from './routes/memory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,6 +51,27 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300,                  // max 300 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use('/api/', apiLimiter);
+
+// Tighter limit on auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later.' }
+});
+app.use('/api/garmin/login', authLimiter);
+app.use('/api/garmin/mfa', authLimiter);
 
 // Request logging
 app.use((req, res, next) => {
@@ -76,6 +99,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/patterns', patternsRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/planned-activities', plannedActivitiesRoutes);
+app.use('/api/memory', memoryRoutes);
 
 // Serve static frontend in production
 if (process.env.NODE_ENV === 'production') {
@@ -107,7 +131,11 @@ async function start() {
     const [hour, minute] = syncTime.split(':');
     cron.schedule(`${minute} ${hour} * * *`, async () => {
       logger.info('Running scheduled Garmin sync');
-      await scheduleDailySync();
+      try {
+        await scheduleDailySync();
+      } catch (err) {
+        logger.error('Scheduled Garmin sync failed:', err);
+      }
     });
     logger.info(`Scheduled daily Garmin sync at ${syncTime}`);
 

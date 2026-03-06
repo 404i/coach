@@ -19,7 +19,7 @@ const router = express.Router();
 router.get('/distribution', async (req, res) => {
   try {
     const email = req.query.email;
-    const days = parseInt(req.query.days) || 30;
+    const days = Math.min(Math.max(parseInt(req.query.days) || 30, 1), 365);
 
     if (!email) {
       return res.status(400).json({ error: 'Email parameter is required' });
@@ -37,7 +37,7 @@ router.get('/distribution', async (req, res) => {
 router.get('/insights', async (req, res) => {
   try {
     const email = req.query.email;
-    const days = parseInt(req.query.days) || 30;
+    const days = Math.min(Math.max(parseInt(req.query.days) || 30, 1), 365);
 
     if (!email) {
       return res.status(400).json({ error: 'Email parameter is required' });
@@ -95,12 +95,12 @@ router.get('/latest', async (req, res) => {
 router.get('/recent', async (req, res) => {
   try {
     const email = req.query.email;
-    const days = parseInt(req.query.days) || 7;
-    
+    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 365);
+
     if (!email) {
       return res.status(400).json({ error: 'Email parameter is required' });
     }
-    
+
     const recent = await getRecentActivities(email, days);
     res.json(recent);
   } catch (error) {

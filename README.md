@@ -362,6 +362,22 @@ python scripts/import_garmindb_to_coach.py \
 
 See [CHANGELOG.md](CHANGELOG.md) for details.
 
+## Acknowledgments
+
+This project would not be possible without the following open-source projects and communities:
+
+- **[GarminDB](https://github.com/tcgoetz/GarminDB)** — Python toolkit for parsing and managing Garmin health & fitness data from Garmin Connect. Powers our local data pipeline.
+- **[garth](https://github.com/matin/garth)** — Lightweight Python library for authenticating with Garmin Connect. Used for secure credential handling and session management.
+- **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** — Open protocol by Anthropic enabling AI assistants to interact with external tools and data sources. The backbone of our Claude Desktop integration.
+- **[LM Studio](https://lmstudio.ai/)** & **[Ollama](https://ollama.ai/)** — Local LLM inference engines that make self-hosted AI coaching possible without cloud dependencies.
+- **[Knex.js](https://knexjs.org/)** — SQL query builder for Node.js. Handles all our SQLite database operations and migrations.
+- **[Express](https://expressjs.com/)** — Fast, minimal web framework for the backend API.
+- **[React](https://react.dev/)** & **[Vite](https://vitejs.dev/)** — Frontend framework and build tooling for the coaching dashboard.
+- **[TailwindCSS](https://tailwindcss.com/)** — Utility-first CSS framework for the UI.
+- **[Winston](https://github.com/winstonjs/winston)** — Logging library used throughout the backend.
+
+Thank you to all contributors and maintainers of these projects.
+
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

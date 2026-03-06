@@ -181,20 +181,34 @@ export async function syncDateRange(email, startDate, endDate) {
       throw new Error(`User not found: ${email}`);
     }
     
+    // Pre-fetch all activities for every date in one query to avoid N+1
+    const allSyncDates = Object.keys(data.dates);
+    const allActivities = allSyncDates.length > 0
+      ? await db('activities')
+          .where('profile_id', user.id)
+          .whereRaw(
+            `DATE(date) IN (${allSyncDates.map(() => '?').join(',')})`,
+            allSyncDates
+          )
+          .select('date', 'training_load')
+      : [];
+    const activitiesByDate = {};
+    for (const act of allActivities) {
+      const d = String(act.date).slice(0, 10);
+      (activitiesByDate[d] = activitiesByDate[d] || []).push(act);
+    }
+
     // Store metrics in database
     for (const [date, metrics] of Object.entries(data.dates)) {
       logger.info(`Processing date ${date}. Metrics keys: ${Object.keys(metrics).join(', ')}`);
-      
+
       // Extract key metrics from Garmin API response structure
       // Sleep data is nested in dailySleepDTO
       const sleepDto = metrics.sleep?.dailySleepDTO;
-      
-      // Calculate training load from activities for this date
-      const activitiesForDate = await db('activities')
-        .where('profile_id', user.id)
-        .whereRaw('DATE(date) = ?', [date])
-        .select('training_load');
-      
+
+      // Calculate training load from activities for this date (pre-fetched above)
+      const activitiesForDate = activitiesByDate[date] || [];
+
       const dailyTrainingLoad = activitiesForDate.reduce((sum, act) => {
         return sum + (act.training_load || 0);
       }, 0);

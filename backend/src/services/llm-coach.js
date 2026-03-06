@@ -4,6 +4,8 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
 import { validateWorkoutResponse, validateWeeklyPlanResponse } from './validator.js';
+import { extractJSON } from '../utils/json-extractor.js';
+import { estimateTokens, TOKEN_BUDGET } from '../utils/token-estimator.js';
 import db from '../db/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -122,6 +124,67 @@ async function callLLM(messages, options = {}) {
 }
 
 /**
+ * Multi-turn chunked LLM call.
+ * Splits context across sequential calls, accumulating conversation history,
+ * then sends the final task prompt with full context absorbed.
+ *
+ * @param {string} systemPrompt - System prompt
+ * @param {object[]} chunks - Ordered array of context chunk objects
+ * @param {string} taskPrompt - The actual task prompt (e.g., daily workout template)
+ * @param {object} options - LLM options
+ * @returns {{ content: string, tokensUsed: number, responseTime: number }}
+ */
+async function callLLMChunked(systemPrompt, chunks, taskPrompt, options = {}) {
+  if (chunks.length <= 1) {
+    // Single chunk — standard single-call path
+    const contextStr = JSON.stringify(chunks[0] || {}, null, 2);
+    const userPrompt = taskPrompt.replace('{{CONTEXT}}', contextStr);
+    return callLLM(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      options
+    );
+  }
+
+  logger.info(`Multi-turn LLM call: ${chunks.length} chunks`);
+  let totalTokens = 0;
+  let totalTime = 0;
+  const messages = [{ role: 'system', content: systemPrompt }];
+
+  // Passes 1..N-1: feed context chunks and accumulate acknowledgments
+  for (let i = 0; i < chunks.length - 1; i++) {
+    const chunkStr = JSON.stringify(chunks[i], null, 2);
+    messages.push({
+      role: 'user',
+      content: `Absorb this training data (part ${i + 1}/${chunks.length}). Do NOT generate a workout yet — just acknowledge receipt and wait for more data.\n\n${chunkStr}`,
+    });
+
+    const ack = await callLLM(messages, { ...options, maxTokens: 100 });
+    totalTokens += ack.tokensUsed || 0;
+    totalTime += ack.responseTime || 0;
+    messages.push({ role: 'assistant', content: ack.content });
+  }
+
+  // Final pass: last chunk + task prompt
+  const lastChunkStr = JSON.stringify(chunks[chunks.length - 1], null, 2);
+  const userPrompt = taskPrompt.replace(
+    '{{CONTEXT}}',
+    `${lastChunkStr}\n\n(All previous data chunks have been provided above in this conversation.)`
+  );
+  messages.push({ role: 'user', content: userPrompt });
+
+  const finalResult = await callLLM(messages, options);
+  totalTokens += finalResult.tokensUsed || 0;
+  totalTime += finalResult.responseTime || 0;
+
+  return {
+    content: finalResult.content,
+    tokensUsed: totalTokens,
+    responseTime: totalTime,
+    chunksUsed: chunks.length,
+  };
+}
+
+/**
  * Log LLM decision to database
  */
 async function logDecision(profileId, date, decisionType, context, llmResponse, tokensUsed, responseTime, validationResult = null) {
@@ -155,48 +218,28 @@ async function logDecision(profileId, date, decisionType, context, llmResponse, 
  * Generate daily workout options (4 variants)
  */
 export async function generateDailyWorkouts(context) {
-  const profileId = context.profile_id || 'unknown';
-  const date = context.date;
+  const profileId = context.profile_id || context[0]?.profile_id || 'unknown';
+  const date = context.date || context[0]?.date;
   
   logger.info(`Generating daily workouts for ${profileId} on ${date}`);
   
   try {
-    // Build prompt with context
-    const userPrompt = DAILY_WORKOUT_PROMPT
-      .replace('{{CONTEXT}}', JSON.stringify(context, null, 2));
+    // Support both single-context and chunked-context
+    const chunks = Array.isArray(context) ? context : [context];
     
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ];
+    const { content, tokensUsed, responseTime, chunksUsed } = await callLLMChunked(
+      SYSTEM_PROMPT, chunks, DAILY_WORKOUT_PROMPT, { json: true }
+    );
     
-    const { content, tokensUsed, responseTime } = await callLLM(messages, { json: true });
-    
-    // Clean up LLM response - strip conversational text and markdown
-    let jsonContent = content.trim();
-    
-    // Strip conversational prefixes like "Certainly!", "Here's the...", etc.
-    jsonContent = jsonContent.replace(/^(Certainly!?|Sure!?|Here's|Here is|Given the|Based on|Let me).*?[:\n]\s*/i, '');
-    
-    // Strip markdown code blocks
-    if (jsonContent.startsWith('```json')) {
-      jsonContent = jsonContent.replace(/^```json\s*\n?/,'').replace(/\n?```\s*$/,'');
-    } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/^```\s*\n?/,'').replace(/\n?```\s*$/,'');
+    if (chunksUsed > 1) {
+      logger.info(`Daily workout used ${chunksUsed} context chunks`);
     }
     
-    // Find the first { and last } to extract pure JSON
-    const firstBrace = jsonContent.indexOf('{');
-    const lastBrace = jsonContent.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
-      jsonContent = jsonContent.substring(firstBrace, lastBrace + 1);
-    }
-    
-    // Parse JSON response
-    const llmResponse = JSON.parse(jsonContent);
+    // Extract clean JSON from LLM response
+    const llmResponse = extractJSON(content);
     
     // Validate response
-    const validation = validateWorkoutResponse(llmResponse, context);
+    const validation = validateWorkoutResponse(llmResponse, Array.isArray(context) ? context[0] : context);
     
     if (!validation.valid) {
       logger.warn('LLM workout response validation failed:', validation.errors);
@@ -204,14 +247,16 @@ export async function generateDailyWorkouts(context) {
       // Retry once
       if (validation.retryable) {
         logger.info('Retrying workout generation with feedback');
-        messages.push(
+        const retryMessages = [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: DAILY_WORKOUT_PROMPT.replace('{{CONTEXT}}', JSON.stringify(chunks[chunks.length - 1], null, 2)) },
           { role: 'assistant', content },
           { role: 'user', content: `Please fix these issues: ${validation.errors.join(', ')}` }
-        );
+        ];
         
-        const retry = await callLLM(messages, { json: true });
-        const retryResponse = JSON.parse(retry.content);
-        const retryValidation = validateWorkoutResponse(retryResponse, context);
+        const retry = await callLLM(retryMessages, { json: true });
+        const retryResponse = extractJSON(retry.content);
+        const retryValidation = validateWorkoutResponse(retryResponse, Array.isArray(context) ? context[0] : context);
         
         if (retryValidation.valid) {
           await logDecision(profileId, date, 'daily_workout', context, retryResponse, retry.tokensUsed, retry.responseTime, retryValidation);
@@ -236,45 +281,26 @@ export async function generateDailyWorkouts(context) {
  * Generate weekly training plan (7 days)
  */
 export async function generateWeeklyPlan(context) {
-  const profileId = context.profile_id || 'unknown';
-  const weekStart = context.week_start;
+  const profileId = context.profile_id || context[0]?.profile_id || 'unknown';
+  const weekStart = context.week_start || context[0]?.week_start;
   
   logger.info(`Generating weekly plan for ${profileId} starting ${weekStart}`);
   
   try {
-    const userPrompt = WEEKLY_PLAN_PROMPT
-      .replace('{{CONTEXT}}', JSON.stringify(context, null, 2));
+    const chunks = Array.isArray(context) ? context : [context];
     
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ];
+    const { content, tokensUsed, responseTime, chunksUsed } = await callLLMChunked(
+      SYSTEM_PROMPT, chunks, WEEKLY_PLAN_PROMPT, { json: true }
+    );
     
-    const { content, tokensUsed, responseTime } = await callLLM(messages, { json: true });
-    
-    // Clean up LLM response - strip conversational text and markdown
-    let jsonContent = content.trim();
-    
-    // Strip conversational prefixes
-    jsonContent = jsonContent.replace(/^(Certainly!?|Sure!?|Here's|Here is|Given the|Based on|Let me).*?[:\n]\s*/i, '');
-    
-    // Strip markdown code blocks
-    if (jsonContent.startsWith('```json')) {
-      jsonContent = jsonContent.replace(/^```json\s*\n?/,'').replace(/\n?```\s*$/,'');
-    } else if (jsonContent.startsWith('```')) {
-      jsonContent = jsonContent.replace(/^```\s*\n?/,'').replace(/\n?```\s*$/,'');
+    if (chunksUsed > 1) {
+      logger.info(`Weekly plan used ${chunksUsed} context chunks`);
     }
     
-    // Find the first { and last } to extract pure JSON
-    const firstBrace = jsonContent.indexOf('{');
-    const lastBrace = jsonContent.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && firstBrace < lastBrace) {
-      jsonContent = jsonContent.substring(firstBrace, lastBrace + 1);
-    }
+    // Extract clean JSON from LLM response
+    const llmResponse = extractJSON(content);
     
-    const llmResponse = JSON.parse(jsonContent);
-    
-    const validation = validateWeeklyPlanResponse(llmResponse, context);
+    const validation = validateWeeklyPlanResponse(llmResponse, Array.isArray(context) ? context[0] : context);
     
     if (!validation.valid) {
       logger.warn('LLM weekly plan validation failed:', validation.errors);
@@ -289,7 +315,7 @@ export async function generateWeeklyPlan(context) {
     
     // Return fallback instead of throwing
     const { generateSafeWeeklyFallback } = await import('./validator.js');
-    return generateSafeWeeklyFallback(context);
+    return generateSafeWeeklyFallback(Array.isArray(context) ? context[0] : context);
   }
 }
 
@@ -359,17 +385,26 @@ export async function checkLMStudioHealth() {
   try {
     const config = getLLMConfig();
     const headers = config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {};
-    const response = await axios.get(`${config.url}/models`, { 
+    
+    let url;
+    if (config.provider === 'ollama') {
+      url = `${config.ollamaUrl}/api/tags`;
+    } else {
+      url = `${config.lmStudioUrl}/models`;
+    }
+    
+    const response = await axios.get(url, { 
       timeout: 5000,
       headers
     });
-    return { available: true, models: response.data.data || [] };
+    return { available: true, models: response.data.data || response.data.models || [] };
   } catch (error) {
     const config = getLLMConfig();
-    logger.warn('LM Studio health check failed:', {
+    const url = config.provider === 'ollama' ? `${config.ollamaUrl}/api/tags` : `${config.lmStudioUrl}/models`;
+    logger.warn('LLM health check failed:', {
       message: error.message,
       code: error.code,
-      url: `${config.url}/models`
+      url
     });
     return { available: false, error: error.message };
   }

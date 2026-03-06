@@ -64,17 +64,24 @@ export function createDataContext(dataDate, systemDate = null) {
   const ageHours = differenceInHours(now, dataDateTime);
   
   let warning = null;
+  let needs_sync = false;
   if (ageHours >= 48) {
     warning = `⚠️  Data is ${Math.floor(ageHours / 24)} days old`;
+    needs_sync = true;
   } else if (ageHours >= 24) {
     warning = '⚠️  Data is 1 day old';
+    needs_sync = true;
+  } else if (ageHours >= 2) {
+    warning = `⚠️  Data is ${ageHours} hours old — consider syncing`;
+    needs_sync = true;
   }
   
   return {
     data_date: dataDate,
     system_date: currentDateStr,
     data_age_hours: ageHours,
-    is_current: ageHours < 24,
+    is_current: ageHours < 2,
+    needs_sync,
     timezone: process.env.TZ || 'UTC',
     warning: warning
   };
