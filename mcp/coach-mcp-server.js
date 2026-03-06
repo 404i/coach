@@ -30,6 +30,7 @@ import { TOOLS } from './lib/tool-definitions.js';
 import { sessionHandlers }       from './lib/handlers/session.js';
 import { coachingHandlers }      from './lib/handlers/coaching.js';
 import { garminHandlers }        from './lib/handlers/garmin.js';
+import { stravaHandlers }        from './lib/handlers/strava.js';
 import { planningHandlers }      from './lib/handlers/planning.js';
 import { analyticsHandlers }     from './lib/handlers/analytics.js';
 import { weatherAlertsHandlers } from './lib/handlers/weather-alerts.js';
@@ -67,6 +68,7 @@ const allHandlers = {
   ...sessionHandlers,
   ...coachingHandlers,
   ...garminHandlers,
+  ...stravaHandlers,
   ...planningHandlers,
   ...analyticsHandlers,
   ...weatherAlertsHandlers,

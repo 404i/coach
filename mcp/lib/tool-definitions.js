@@ -598,4 +598,55 @@ export const TOOLS = [
       required: ["type"],
     },
   },
+
+  // ── Strava Integration ──────────────────────────────────────────────────
+  {
+    name: "connect_strava",
+    description: "Connect the athlete's Strava account. Uses the configured STRAVA_CLIENT_ID/SECRET/REFRESH_TOKEN from .env to establish an OAuth connection. Must be called before syncing Strava data. Only needs to be done once per user.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "sync_strava_data",
+    description: "Pull activities from Strava API into the local database. Syncs the last N days (default 30). Requires Strava to be connected first via connect_strava. Use this to get cycling, running, swimming, and other activities recorded on Strava that may not appear in Garmin.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        days: { type: "number", description: "Number of days to sync (default: 30)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_strava_activities",
+    description: "Query locally-stored Strava activities. Use to view rides, runs, and other workouts synced from Strava. Can filter by date range, activity type (Ride, Run, Swim, MountainBikeRide, TrailRun, etc.), and limit. Activities include distance, duration, elevation, HR, power, and suffer score.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        limit: { type: "number", description: "Max activities to return (default: 20)" },
+        start_date: { type: "string", description: "Start date (YYYY-MM-DD)" },
+        end_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+        type: { type: "string", description: "Activity type filter: Ride, Run, Swim, MountainBikeRide, TrailRun, etc." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_strava_athlete",
+    description: "Fetch the connected Strava athlete profile. Returns name, location, premium status, weight, FTP, and account creation date. Useful for cross-referencing Strava identity with Garmin profile.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+      },
+      required: [],
+    },
+  },
 ];
