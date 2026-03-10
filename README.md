@@ -27,9 +27,10 @@ An AI-powered training coach that integrates with GarminDB to provide personaliz
 - **Docker** 20.10+ with Compose v2 (recommended) **or** Node.js 18+ for local dev
 - **Git** with submodule support — clone with `git clone --recurse-submodules`
 - **An AI backend** (at least one):
-  - [Claude Desktop](https://claude.ai/download) — MCP-based coaching conversations (recommended)
-  - [LM Studio](https://lmstudio.ai/) — local LLM, OpenAI-compatible API on port 1234
-  - [Ollama](https://ollama.ai/) — local LLM, native API on port 11434
+  - [Claude Desktop](https://claude.ai/download) — MCP-based coaching conversations (recommended for richest experience)
+  - [LM Studio](https://lmstudio.ai/) — local LLM, OpenAI-compatible API on port 1234 (best if you want fully offline / private)
+  - [Ollama](https://ollama.ai/) — local LLM, native API on port 11434 (lightweight CLI-first option)
+  > **Not sure which to pick?** Start with **Claude Desktop** — it gives you natural-language coaching out of the box via MCP. Add LM Studio or Ollama later if you want a fully offline setup.
 - **Python 3.8+** (only needed for local dev without Docker — GarminDB sync)
 - **OpenWeatherMap API key** (free tier, optional — enables weather-aware coaching)
 
@@ -79,15 +80,31 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 ### Option 1: Docker (Recommended)
 
-**Personal Setup** (with your existing GarminDB data):
 ```bash
+# 1. Clone the repo (includes GarminDB submodule)
+git clone --recurse-submodules https://github.com/404i/coach.git
+cd coach
+
+# 2. Create your environment file
+cp .env.example .env
+# Edit .env — at minimum set ENCRYPTION_KEY (see comments inside .env for how to generate one)
+
+# 3. Start the coach
+# Personal setup (mounts your existing Garmin data from ~/HealthData):
 docker compose -f docker-compose.personal.yml up -d
+
+# OR shareable setup (clean install, no personal data):
+# docker compose -f docker-compose.shareable.yml up -d
 ```
 
-**Shareable Setup** (clean installation):
+> **Windows users**: open `.env` in Notepad and set `GARMINDB_PATH` to your full Windows path (e.g. `C:\Users\You\HealthData`). Tilde `~` does not expand on Windows.
+
+**Verify it's running:**
 ```bash
-docker compose -f docker-compose.shareable.yml up -d
+curl http://localhost:8080/api/health
+# Expected: {"status":"ok", ...}
 ```
+> On Windows without `curl`, open <http://localhost:8080/api/health> in your browser — you should see a JSON response with `"status":"ok"`.
 
 Access:
 - Backend API: http://localhost:8080
@@ -97,10 +114,28 @@ See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for details or [DOCKER_DEPLOYME
 
 ### Option 2: Local Development
 
-Install dependencies:
 ```bash
+# 1. Clone
+git clone --recurse-submodules https://github.com/404i/coach.git
+cd coach
+
+# 2. Install backend dependencies
 npm install
+
+# 3. Create and edit your environment file
+cp .env.example .env
+# Edit .env — set at least ENCRYPTION_KEY
+
+# 4. (Optional) Set up Python venv for GarminDB sync
+python3 -m venv .venv-garmin
+source .venv-garmin/bin/activate   # Windows: .venv-garmin\Scripts\activate
+pip install -r vendor/GarminDB/requirements.txt
+
+# 5. Start the server
+node scripts/coach_web_server.js
 ```
+
+Open http://localhost:8080 in your browser.
 
 ## Data Sync
 
@@ -211,12 +246,14 @@ Open your Claude Desktop config file:
       "command": "node",
       "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
       "env": {
-        "COACH_API_URL": "http://localhost:8088"
+        "COACH_API_URL": "http://localhost:8080"
       }
     }
   }
 }
 ```
+
+> **Port note**: Use `8080` if you started with `docker-compose.personal.yml` or `docker-compose.shareable.yml`. Use `8088` only if you started with the base `docker-compose.yml`.
 
 **Option B — Docker exec (coach running in Docker):**
 
@@ -308,7 +345,9 @@ Includes Claude Desktop + Claude Code setup.
 
 ## Garmin sync setup
 
-GarminDB is vendored under `vendor/GarminDB` and wired with local helper scripts:
+[GarminDB](https://github.com/tcgoetz/GarminDB) is an open-source Python toolkit that downloads your health and fitness data from Garmin Connect and stores it in local SQLite databases. The coach reads these databases to generate personalised training insights. GarminDB is included as a Git submodule under `vendor/GarminDB` — if you cloned with `--recurse-submodules` it is already present.
+
+> **First-time users**: You need a free [Garmin Connect](https://connect.garmin.com/) account and a Garmin device that syncs to it. The sync scripts below will download your data and build the local databases automatically.
 
 1. Initial setup already prepared:
 - local config: `data/garmin/GarminConnectConfig.json`
@@ -316,18 +355,34 @@ GarminDB is vendored under `vendor/GarminDB` and wired with local helper scripts
 
 2. Run latest sync (recommended for normal updates):
 
+**macOS / Linux / WSL / Git Bash:**
 ```bash
 GARMIN_USER="you@example.com" \
 GARMIN_PASSWORD="your_password" \
 ./scripts/garmindb_sync_latest.sh
 ```
 
+**PowerShell (Windows):**
+```powershell
+$env:GARMIN_USER="you@example.com"
+$env:GARMIN_PASSWORD="your_password"
+bash ./scripts/garmindb_sync_latest.sh      # requires WSL or Git Bash on PATH
+```
+
 3. Run full historical sync (first-time import):
 
+**macOS / Linux / WSL / Git Bash:**
 ```bash
 GARMIN_USER="you@example.com" \
 GARMIN_PASSWORD="your_password" \
 ./scripts/garmindb_sync_all.sh
+```
+
+**PowerShell (Windows):**
+```powershell
+$env:GARMIN_USER="you@example.com"
+$env:GARMIN_PASSWORD="your_password"
+bash ./scripts/garmindb_sync_all.sh
 ```
 
 4. If a long download run times out, import whatever was already downloaded:
@@ -473,21 +528,33 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - You can use `GARMIN_PASSWORD_FILE=/path/to/file` instead of `GARMIN_PASSWORD`.
 - If Garmin prompts for email MFA, either enter the code interactively at `MFA code:` or pass `GARMIN_MFA_CODE`:
 
-```bash
-GARMIN_USER="you@example.com" \
-GARMIN_PASSWORD="your_password" \
-GARMIN_MFA_CODE="123456" \
-./scripts/garmindb_sync_latest.sh
-```
+  **Bash (macOS / Linux / WSL / Git Bash):**
+  ```bash
+  GARMIN_USER="you@example.com" \
+  GARMIN_PASSWORD="your_password" \
+  GARMIN_MFA_CODE="123456" \
+  ./scripts/garmindb_sync_latest.sh
+  ```
+  **PowerShell (Windows):**
+  ```powershell
+  $env:GARMIN_USER="you@example.com"; $env:GARMIN_PASSWORD="your_password"; $env:GARMIN_MFA_CODE="123456"
+  bash ./scripts/garmindb_sync_latest.sh
+  ```
 
 - If first sync is too large/slow, bootstrap with a recent start date:
 
-```bash
-GARMIN_USER="you@example.com" \
-GARMIN_PASSWORD="your_password" \
-GARMIN_START_DATE="01/01/2024" \
-./scripts/garmindb_sync_latest.sh
-```
+  **Bash:**
+  ```bash
+  GARMIN_USER="you@example.com" \
+  GARMIN_PASSWORD="your_password" \
+  GARMIN_START_DATE="01/01/2024" \
+  ./scripts/garmindb_sync_latest.sh
+  ```
+  **PowerShell:**
+  ```powershell
+  $env:GARMIN_USER="you@example.com"; $env:GARMIN_PASSWORD="your_password"; $env:GARMIN_START_DATE="01/01/2024"
+  bash ./scripts/garmindb_sync_latest.sh
+  ```
 
 - Network tuning env vars are supported for long Garmin runs:
   `GARMINDB_HTTP_TIMEOUT` (default `30`), `GARMINDB_HTTP_RETRIES` (default `6`), `GARMINDB_HTTP_BACKOFF` (default `1.0`).

@@ -65,7 +65,9 @@ docker pull 404i/garmin-coach-ai:latest
 
 # 2. Configure
 cp .env.example .env
-nano .env  # Set GARMINDB_PATH to your GarminDB location
+# Edit .env — set GARMINDB_PATH to your GarminDB HealthData location
+# macOS/Linux: open .env in your preferred editor (nano, vim, code, etc.)
+# Windows:     notepad .env
 
 # 3. Run
 docker-compose -f docker-compose.shareable.yml up -d
@@ -84,7 +86,9 @@ curl -O https://raw.githubusercontent.com/404i/coach/main/.env.example
 
 # 2. Configure
 cp .env.example .env
-nano .env  # Set GARMINDB_PATH to your GarminDB location
+# Edit .env — set GARMINDB_PATH to your GarminDB HealthData location
+# macOS/Linux: open .env in your preferred editor (nano, vim, code, etc.)
+# Windows:     notepad .env
 
 # 3. Pull and run (no build needed)
 docker compose -f docker-compose.shareable.yml pull
