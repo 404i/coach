@@ -139,6 +139,8 @@ Open http://localhost:8080 in your browser.
 
 ## Data Sync
 
+> **Windows users**: All sync scripts below are bash. Run them from **WSL2** or **Git Bash**, not PowerShell.
+
 ### First Time Setup
 
 Save encrypted Garmin credentials (one-time):
@@ -192,7 +194,7 @@ Then open `http://127.0.0.1:8080`.
 Static-only mode (no sync button backend):
 
 ```bash
-python3 -m http.server 8080
+python3 -m http.server 8080   # Windows: use "python" instead of "python3"
 ```
 
 To enable AI responses in the browser UI, run LM Studio local server and set:
@@ -394,7 +396,10 @@ bash ./scripts/garmindb_sync_all.sh
 5. Load GarminDB days into coach MCP store:
 
 ```bash
+# macOS / Linux:
 . .venv-garmin/bin/activate
+# Windows: .venv-garmin\Scripts\activate
+
 python scripts/import_garmindb_to_coach.py \
   --profile-id demo-athlete \
   --latest-days 30
@@ -566,18 +571,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - `schemas/athlete_profile.v1.json`
 - `schemas/daily_metrics.v1.json`
 - `schemas/recommendation.v1.json`
-
-## Notes and limits
-
-- ✅ **Docker deployment ready** (personal and shareable setups)
-- ✅ **REST API** with comprehensive endpoints
-- ✅ **Activity verification** prevents AI hallucinations
-- ✅ **Data freshness tracking** in all responses
-- ✅ **GarminDB integration** with VO2 max, activity details, steps, floors
-- ✅ **Claude Desktop MCP integration**
-- ⚠️ **Local development only** - not production-ready (see [SECURITY.md](SECURITY.md))
-- ⏳ **No OCR extraction yet** - screenshot values must be typed manually
-- ⏳ **Rule-based recommendations** - LLM integration for conversational responses only
 
 ## Docker Hub
 
