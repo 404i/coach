@@ -59,20 +59,20 @@ cp .env.example .env
 cd backend && npm start
 
 # In another terminal, start MCP server (optional)
-node mcp/server.js
+node mcp/coach-mcp-server.js
 ```
 
 ### Docker Development
 
 ```bash
 # Personal setup (with your data)
-./docker-setup.sh personal
+docker compose -f docker-compose.personal.yml up -d
 
 # Shareable setup (clean)
-./docker-setup.sh shareable
+docker compose -f docker-compose.shareable.yml up -d
 
 # View logs
-docker-compose -f docker-compose.personal.yml logs -f
+docker compose -f docker-compose.personal.yml logs -f
 ```
 
 ## How to Contribute

@@ -21,11 +21,8 @@ The Garmin AI Coach application supports two Docker deployment scenarios:
 This setup uses your existing GarminDB data and coach profile:
 
 ```bash
-# Run the setup script
-./docker-setup.sh personal
-
-# Or manually:
-docker-compose -f docker-compose.personal.yml up -d
+# Run the setup command
+docker compose -f docker-compose.personal.yml up -d
 ```
 
 **What happens:**
@@ -40,11 +37,8 @@ docker-compose -f docker-compose.personal.yml up -d
 This setup creates a clean installation for others to use:
 
 ```bash
-# Run the setup script
-./docker-setup.sh shareable
-
-# Or manually:
-docker-compose -f docker-compose.shareable.yml up -d
+# Run the setup command
+docker compose -f docker-compose.shareable.yml up -d
 ```
 
 **What happens:**
@@ -188,7 +182,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": [
         "exec", "-i", 
         "garmin-coach-mcp-personal", 
-        "node", "/app/mcp/server.js"
+        "node", "/app/mcp/coach-mcp-server.js"
       ]
     }
   }
@@ -205,7 +199,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": [
         "exec", "-i", 
         "garmin-coach-mcp", 
-        "node", "/app/mcp/server.js"
+        "node", "/app/mcp/coach-mcp-server.js"
       ]
     }
   }
@@ -326,7 +320,6 @@ tar -czf garmin-coach-distribution.tar.gz \
   docker-compose.shareable.yml \
   Dockerfile \
   .dockerignore \
-  docker-setup.sh \
   DOCKER_DEPLOYMENT.md \
   README.md \
   .env.example
@@ -349,7 +342,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # 4. Start
-./docker-setup.sh shareable
+docker compose -f docker-compose.shareable.yml up -d
 ```
 
 ## Resource Requirements

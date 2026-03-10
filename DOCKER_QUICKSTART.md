@@ -14,10 +14,10 @@
 
 **Quick Start:**
 ```bash
-# One command setup
-./docker-setup.sh personal
+# Personal setup
+docker compose -f docker-compose.personal.yml up -d
 
-# Or manually
+# Or with docker-compose (v1)
 docker-compose -f docker-compose.personal.yml up -d
 ```
 
@@ -41,10 +41,10 @@ docker-compose -f docker-compose.personal.yml up -d
 
 **Quick Start:**
 ```bash
-# One command setup
-./docker-setup.sh shareable
+# Shareable setup
+docker compose -f docker-compose.shareable.yml up -d
 
-# Or manually
+# Or with docker-compose (v1)
 docker-compose -f docker-compose.shareable.yml up -d
 ```
 
@@ -160,7 +160,7 @@ docker-compose -f docker-compose.shareable.yml exec coach \
   "mcpServers": {
     "coach-mcp-personal": {
       "command": "docker",
-      "args": ["exec", "-i", "garmin-coach-mcp-personal", "node", "/app/mcp/server.js"]
+      "args": ["exec", "-i", "garmin-coach-mcp-personal", "node", "/app/mcp/coach-mcp-server.js"]
     }
   }
 }
@@ -172,7 +172,7 @@ docker-compose -f docker-compose.shareable.yml exec coach \
   "mcpServers": {
     "coach-mcp": {
       "command": "docker",
-      "args": ["exec", "-i", "garmin-coach-mcp", "node", "/app/mcp/server.js"]
+      "args": ["exec", "-i", "garmin-coach-mcp", "node", "/app/mcp/coach-mcp-server.js"]
     }
   }
 }

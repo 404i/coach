@@ -10,7 +10,7 @@ Then open http://127.0.0.1:8080 in your browser.
 
 ### Start MCP Server
 ```bash
-node mcp/server.js
+node mcp/coach-mcp-server.js
 ```
 
 ### Run MCP Demo Client (Python)
@@ -87,7 +87,7 @@ GARMIN_MFA_CODE="123456" \
 ## Key Files
 
 - `app.js` - Browser UI logic
-- `mcp/server.js` - MCP server implementation
+- `mcp/coach-mcp-server.js` - MCP server implementation
 - `scripts/coach_web_server.js` - Local web server
 - `constants.js` - All thresholds and magic numbers
 - `validation.js` - Input validation utilities

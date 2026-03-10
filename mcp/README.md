@@ -5,7 +5,7 @@ This server exposes the training engine as MCP tools over stdio.
 ## Run locally
 
 ```bash
-node mcp/server.js
+node mcp/coach-mcp-server.js
 ```
 
 Use LM Studio-backed responses:
@@ -13,13 +13,13 @@ Use LM Studio-backed responses:
 ```bash
 LM_STUDIO_MODEL=qwen2.5-7b-instruct \
 LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1 \
-node mcp/server.js
+node mcp/coach-mcp-server.js
 ```
 
 Optional store path override:
 
 ```bash
-COACH_MCP_STORE=/absolute/path/coach_store.json node mcp/server.js
+COACH_MCP_STORE=/absolute/path/coach_store.json node mcp/coach-mcp-server.js
 ```
 
 By default data is stored in `data/coach_mcp_store.json`.
@@ -96,7 +96,8 @@ This does:
 
 1. Open Claude Desktop config file:
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - Linux: `~/.config/Claude/claude_desktop_config.json`
 2. Merge in `mcp/claude_desktop_config.example.json` from this repo.
 3. Restart Claude Desktop.
 
@@ -107,9 +108,9 @@ Example config entry:
   "mcpServers": {
     "coach": {
       "command": "node",
-      "args": ["/Users/tsochkata/git/coach/mcp/server.js"],
+      "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
       "env": {
-        "COACH_MCP_STORE": "/Users/tsochkata/git/coach/data/coach_mcp_store.json",
+        "COACH_MCP_STORE": "/path/to/coach/data/coach_mcp_store.json",
         "LM_STUDIO_BASE_URL": "http://127.0.0.1:1234/v1",
         "LM_STUDIO_MODEL": "qwen2.5-7b-instruct"
       }
@@ -130,10 +131,10 @@ Or direct command:
 
 ```bash
 claude mcp add --transport stdio --scope local coach -- \
-  env COACH_MCP_STORE=/Users/tsochkata/git/coach/data/coach_mcp_store.json \
+  env COACH_MCP_STORE=/path/to/coach/data/coach_mcp_store.json \
   env LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1 \
   env LM_STUDIO_MODEL=qwen2.5-7b-instruct \
-  node /Users/tsochkata/git/coach/mcp/server.js
+  node /path/to/coach/mcp/coach-mcp-server.js
 ```
 
 Verify:
@@ -151,7 +152,7 @@ In LM Studio MCP config (`mcp.json`), add:
   "mcpServers": {
     "coach": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/coach/mcp/server.js"],
+      "args": ["/ABSOLUTE/PATH/TO/coach/mcp/coach-mcp-server.js"],
       "env": {
         "LM_STUDIO_BASE_URL": "http://127.0.0.1:1234/v1",
         "LM_STUDIO_MODEL": "qwen2.5-7b-instruct"
@@ -171,7 +172,7 @@ In OpenCode config, add a local MCP entry:
     "coach": {
       "type": "local",
       "enabled": true,
-      "command": ["node", "/ABSOLUTE/PATH/TO/coach/mcp/server.js"],
+      "command": ["node", "/ABSOLUTE/PATH/TO/coach/mcp/coach-mcp-server.js"],
       "env": {
         "LM_STUDIO_BASE_URL": "http://127.0.0.1:1234/v1",
         "LM_STUDIO_MODEL": "qwen2.5-7b-instruct"

@@ -20,18 +20,73 @@ An AI-powered training coach that integrates with GarminDB to provide personaliz
 
 **This application is for LOCAL DEVELOPMENT ONLY.** See [SECURITY.md](SECURITY.md) for full security guidelines before any production deployment.
 
+## Prerequisites
+
+### All Platforms
+
+- **Docker** 20.10+ with Compose v2 (recommended) **or** Node.js 18+ for local dev
+- **Git** with submodule support — clone with `git clone --recurse-submodules`
+- **An AI backend** (at least one):
+  - [Claude Desktop](https://claude.ai/download) — MCP-based coaching conversations (recommended)
+  - [LM Studio](https://lmstudio.ai/) — local LLM, OpenAI-compatible API on port 1234
+  - [Ollama](https://ollama.ai/) — local LLM, native API on port 11434
+- **Python 3.8+** (only needed for local dev without Docker — GarminDB sync)
+- **OpenWeatherMap API key** (free tier, optional — enables weather-aware coaching)
+
+### macOS
+
+```bash
+brew install --cask docker        # Docker Desktop
+brew install node                  # Node.js 18+
+brew install python3               # Python 3
+brew install ollama                # Ollama (optional)
+# Claude Desktop & LM Studio — download from their websites
+```
+
+### Windows
+
+> **WSL2 is required** for all Garmin sync scripts (they are bash).
+
+```powershell
+# In an admin PowerShell — then reboot
+wsl --install
+```
+
+- **Docker Desktop for Windows** — download from [docker.com](https://www.docker.com/products/docker-desktop/) (enable the WSL2 backend in Settings)
+- **Git for Windows** — download from [git-scm.com](https://git-scm.com/) (includes Git Bash)
+- **Node.js 18+** — `winget install OpenJS.NodeJS` or download from [nodejs.org](https://nodejs.org/)
+- **Python 3** — `winget install Python.Python.3` or download from [python.org](https://www.python.org/)
+- **Claude Desktop / LM Studio / Ollama** — download from their respective websites
+
+### Linux
+
+```bash
+# Docker + Compose v2 (Debian/Ubuntu example)
+sudo apt install docker.io docker-compose-v2
+sudo usermod -aG docker $USER   # then log out and back in
+
+# Node.js 18+ (via nodesource or nvm)
+# Python 3 (usually pre-installed)
+sudo apt install python3 python3-pip python3-venv
+
+# Ollama (optional)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Claude Desktop & LM Studio — download Linux builds from their websites
+```
+
 ## Quick Start
 
 ### Option 1: Docker (Recommended)
 
 **Personal Setup** (with your existing GarminDB data):
 ```bash
-./docker-setup.sh personal
+docker compose -f docker-compose.personal.yml up -d
 ```
 
 **Shareable Setup** (clean installation):
 ```bash
-./docker-setup.sh shareable
+docker compose -f docker-compose.shareable.yml up -d
 ```
 
 Access:
@@ -87,7 +142,7 @@ Save encrypted Garmin credentials (one-time):
 ✅ **Post-sync verification** confirms data imported  
 ✅ **No restart needed** - Claude picks up new data automatically  
 
-See [SYNC_QUICK_REF.md](SYNC_QUICK_REF.md) for quick reference or [SYNC_PROCESS.md](SYNC_PROCESS.md) for comprehensive documentation.
+See the Data Sync section above for more details and options.
 
 ## Run
 
@@ -111,30 +166,20 @@ To enable AI responses in the browser UI, run LM Studio local server and set:
 
 ## Docker Deployment
 
-### Quick Start
+### Start Services
 
 ```bash
-# Personal setup (includes your data)
-./docker-setup.sh personal
+# Personal setup (with your data)
+docker compose -f docker-compose.personal.yml up -d
 
 # Shareable setup (clean installation)
-./docker-setup.sh shareable
-```
-
-### Manual Docker Commands
-
-```bash
-# Personal setup
-docker-compose -f docker-compose.personal.yml up -d
-
-# Shareable setup  
-docker-compose -f docker-compose.shareable.yml up -d
+docker compose -f docker-compose.shareable.yml up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
 
 ### Importing Data
@@ -149,18 +194,44 @@ docker-compose exec coach \
 
 ### Claude Desktop Integration
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Open your Claude Desktop config file:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+**Option A — Stdio (Claude Desktop on same machine as coach):**
 
 ```json
 {
   "mcpServers": {
-    "coach-mcp": {
-      "command": "docker",
-      "args": ["exec", "-i", "garmin-coach-mcp-personal", "node", "/app/mcp/server.js"]
+    "garmin-ai-coach": {
+      "command": "node",
+      "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
+      "env": {
+        "COACH_API_URL": "http://localhost:8088"
+      }
     }
   }
 }
 ```
+
+**Option B — Docker exec (coach running in Docker):**
+
+```json
+{
+  "mcpServers": {
+    "garmin-ai-coach": {
+      "command": "docker",
+      "args": ["exec", "-i", "garmin-coach-mcp-personal", "node", "/app/mcp/coach-mcp-server.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
 
 **Full Docker documentation:**
 - [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) - Quick reference
@@ -223,7 +294,7 @@ See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for full API documentation.
 Run server:
 
 ```bash
-node mcp/server.js
+node mcp/coach-mcp-server.js
 ```
 
 Run end-to-end MCP demo:
@@ -281,7 +352,6 @@ python scripts/import_garmindb_to_coach.py \
 - **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - API reference and examples
 - **[SECURITY.md](SECURITY.md)** - Security guidelines (READ BEFORE DEPLOYING)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contributing guidelines
-- **[TODO.md](TODO.md)** - Refactoring roadmap and planned improvements
 - **[CHANGELOG.md](CHANGELOG.md)** - Recent bug fixes and changes
 - **[mcp/README.md](mcp/README.md)** - MCP server setup and usage
 
@@ -306,30 +376,36 @@ python scripts/import_garmindb_to_coach.py \
 │   │   │   └── data-freshness.js          # Data context tracking
 │   │   └── server.js            # Express server entry point
 │   └── package.json
+├── engine/                       # Business logic modules
+│   ├── gap-detection.js         # Training gap detection
+│   ├── recovery-scoring.js      # Recovery algorithm
+│   └── workout-planning.js      # Workout selection and planning
+├── frontend/                     # React/Vite coaching dashboard
+│   ├── src/                     # React components
+│   ├── index.html
+│   └── package.json
 ├── mcp/
-│   ├── server.js                # MCP server for Claude Desktop
+│   ├── coach-mcp-server.js      # MCP server for Claude Desktop
+│   ├── lib/                     # Handler modules
 │   └── README.md                # MCP documentation
 ├── scripts/
-│   ├── coach_web_server.js      # Local web server
+│   ├── credential-manager.sh    # Encrypted Garmin credentials
+│   ├── sync-manager.sh          # Robust sync with retry logic
 │   ├── garmindb_sync_*.sh       # Garmin sync scripts
 │   └── import_garmindb_to_coach.py  # GarminDB data importer
 ├── schemas/                      # JSON schema definitions
 │   ├── athlete_profile.v1.json
 │   ├── daily_metrics.v1.json
 │   └── recommendation.v1.json
-├── vendor/GarminDB/             # GarminDB integration
-├── Dockerfile                    # Multi-stage Docker build
+├── storage/                      # Storage abstraction layer
+├── vendor/GarminDB/             # GarminDB integration (submodule)
+├── Dockerfile                    # Docker build
+├── docker-compose.yml            # Base compose config
 ├── docker-compose.personal.yml  # Personal deployment config
 ├── docker-compose.shareable.yml # Shareable deployment config
-├── docker-setup.sh              # One-command Docker setup
 ├── .github/
 │   └── workflows/
 │       └── docker-publish.yml   # CI/CD pipeline
-├── app.js                       # Browser UI logic
-├── index.html                   # Main UI
-├── styles.css                   # Styling
-├── constants.js                 # Centralized thresholds
-├── validation.js                # Input validation
 └── package.json                 # Node.js project config
 ```
 
@@ -446,11 +522,23 @@ docker pull 404i/garmin-coach-ai:latest
 docker build -t 404i/garmin-coach-ai .
 ```
 
+## Platform Notes
+
+| Topic | macOS | Windows | Linux |
+|-------|-------|---------|-------|
+| Docker startup | `docker compose -f ... up -d` | Same — set `GARMINDB_PATH` in `.env` (no `~` expansion; use full path e.g. `C:\Users\You\HealthData`) | Same |
+| Sync scripts (bash) | Work natively | Run from **WSL2** terminal or **Git Bash** | Work natively |
+| Claude Desktop config | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` |
+| Python venv activation | `source .venv-garmin/bin/activate` | `.venv-garmin\Scripts\activate` | `source .venv-garmin/bin/activate` |
+| LM Studio / Ollama URL in Docker | `host.docker.internal` works | `host.docker.internal` works | `host.docker.internal` may not resolve — use `172.17.0.1` or add `extra_hosts: ["host.docker.internal:host-gateway"]` to your compose override |
+| Volume permissions | No issues | No issues | May need `sudo chown $UID:$GID ./data ./logs` before first run |
+
 ## System Requirements
 
-- **Docker**: 20.10+ (for containerized deployment)
+- **Docker**: 20.10+ with Compose v2 (for containerized deployment)
 - **Node.js**: 18+ (for local development)
-- **Python**: 3.8+ (for GarminDB)
+- **Python**: 3.8+ (for GarminDB sync)
+- **AI Backend**: Claude Desktop, LM Studio, or Ollama (at least one)
 - **Disk**: 2GB+ free space
 - **Memory**: 1GB+ recommended
 - **GarminDB**: Pre-synced with your Garmin data
