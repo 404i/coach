@@ -155,7 +155,7 @@ async function callLLMChunked(systemPrompt, chunks, taskPrompt, options = {}) {
     const chunkStr = JSON.stringify(chunks[i], null, 2);
     messages.push({
       role: 'user',
-      content: `Absorb this training data (part ${i + 1}/${chunks.length}). Do NOT generate a workout yet — just acknowledge receipt and wait for more data.\n\n${chunkStr}`,
+      content: `Absorb this training data (part ${i + 1}/${chunks.length}). Do NOT generate a workout yet — just acknowledge receipt and wait for more data.\n\n<training_data>\n${chunkStr}\n</training_data>`,
     });
 
     const ack = await callLLM(messages, { ...options, maxTokens: 100 });
@@ -168,7 +168,7 @@ async function callLLMChunked(systemPrompt, chunks, taskPrompt, options = {}) {
   const lastChunkStr = JSON.stringify(chunks[chunks.length - 1], null, 2);
   const userPrompt = taskPrompt.replace(
     '{{CONTEXT}}',
-    `${lastChunkStr}\n\n(All previous data chunks have been provided above in this conversation.)`
+    `<training_data>\n${lastChunkStr}\n</training_data>\n\n(All previous data chunks have been provided above in this conversation.)`
   );
   messages.push({ role: 'user', content: userPrompt });
 

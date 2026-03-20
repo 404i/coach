@@ -15,7 +15,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 export async function startHttpServer(createMCPServer) {
   const AUTH_TOKEN  = process.env.MCP_AUTH_TOKEN;
   const PORT        = parseInt(process.env.MCP_PORT || '3001', 10);
-  const HOST        = process.env.MCP_BIND_HOST || '0.0.0.0';
+  const HOST        = process.env.MCP_BIND_HOST || '127.0.0.1';
   const RATE_MAX    = parseInt(process.env.MCP_RATE_LIMIT || '60', 10);
   const ALLOWED_IPS = process.env.MCP_ALLOWED_IPS
     ? process.env.MCP_ALLOWED_IPS.split(',').map(s => s.trim()).filter(Boolean)
@@ -59,7 +59,9 @@ export async function startHttpServer(createMCPServer) {
     const provided = authHeader.slice(7);
     try {
       const expected = Buffer.from(AUTH_TOKEN, 'utf8');
-      const received = Buffer.from(provided.padEnd(AUTH_TOKEN.length, '\0'), 'utf8');
+      const received = Buffer.from(provided, 'utf8');
+      // Do NOT pad to equal length — that would defeat the timing-safe guarantee.
+      // The short-circuit &&  ensures timingSafeEqual is never called with mismatched lengths.
       const match = expected.length === received.length && timingSafeEqual(expected, received);
       if (!match) throw new Error('mismatch');
     } catch {

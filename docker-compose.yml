@@ -17,6 +17,7 @@ services:
       - ENABLE_RULE_BASED_FALLBACK=${ENABLE_RULE_BASED_FALLBACK:-true}
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - BACKEND_API_KEY=${BACKEND_API_KEY}
       # Strava integration
       - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
       - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
@@ -43,11 +44,11 @@ services:
       dockerfile: Dockerfile.mcp
     container_name: garmin-ai-coach-mcp
     ports:
-      - "${MCP_BIND_HOST:-0.0.0.0}:${MCP_PORT:-3001}:3001"
+      - "${MCP_BIND_HOST:-127.0.0.1}:${MCP_PORT:-3001}:3001"
     environment:
       - MCP_HTTP_MODE=true
       - MCP_PORT=3001
-      - MCP_BIND_HOST=0.0.0.0
+      - MCP_BIND_HOST=${MCP_BIND_HOST:-127.0.0.1}
       - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
       - MCP_RATE_LIMIT=${MCP_RATE_LIMIT:-60}
       - MCP_ALLOWED_IPS=${MCP_ALLOWED_IPS:-}

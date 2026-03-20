@@ -2,7 +2,10 @@
 # Runs the MCP server in HTTP/SSE mode so Claude Desktop (or any MCP client)
 # can reach it over the local network with Bearer-token authentication.
 
-FROM node:20-alpine
+FROM node:22-alpine
+
+# Apply latest Alpine OS security patches before anything else
+RUN apk upgrade --no-cache
 
 # Non-root user for least-privilege execution
 RUN addgroup -S mcp && adduser -S mcp -G mcp

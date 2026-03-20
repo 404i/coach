@@ -78,12 +78,12 @@ function decrypt(encryptedData) {
       authTag = Buffer.from(parts[2], 'hex');
       encrypted = parts[3];
     } else if (parts.length === 3) {
-      // Legacy 3-part format: iv:authTag:encrypted (hardcoded salt)
-      logger.warn('Decrypting legacy format (hardcoded salt) — re-encrypt to upgrade');
-      salt = Buffer.from('salt');
-      iv = Buffer.from(parts[0], 'hex');
-      authTag = Buffer.from(parts[1], 'hex');
-      encrypted = parts[2];
+      // Legacy 3-part format used a hardcoded salt string, making it vulnerable to
+      // rainbow-table attacks. Reject it and require re-authentication instead.
+      throw new Error(
+        'Stored credentials use a deprecated insecure format. ' +
+        'Please re-enter your Garmin password to re-encrypt with the current secure format.'
+      );
     } else {
       throw new Error('Invalid encrypted data format');
     }

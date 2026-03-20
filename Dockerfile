@@ -1,34 +1,51 @@
 # Simplified Dockerfile for Garmin AI Coach Backend
 # Frontend is optional - can be built separately or served statically
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
+
+# Apply latest Alpine OS security patches before anything else
+RUN apk upgrade --no-cache
+
+# Apply latest Alpine OS security patches before anything else
+RUN apk upgrade --no-cache
 
 # Upgrade npm to get patched bundled dependencies (cross-spawn, minimatch, etc.)
 RUN npm install -g npm@latest
 
-# Install Python, SQLite, and build tools for GarminDB
+# Install runtime system packages
 RUN apk add --no-cache \
     python3 \
-    py3-pip \
     sqlite \
+    bash
+
+# Install build-time-only tools in a named virtual package set so they can
+# be cleanly removed after compilation (reduces final image attack surface).
+RUN apk add --no-cache --virtual .build-deps \
+    py3-pip \
     git \
-    bash \
     build-base \
     python3-dev && \
     pip3 install --no-cache-dir garth --break-system-packages
 
-# Copy backend package files
+# Copy backend package files and install Node dependencies.
+# sqlite3 is compiled from source here (requires build-base).
 COPY backend/package*.json ./backend/
 RUN cd backend && npm ci --only=production && \
     npm rebuild sqlite3 --build-from-source
 
-# Copy GarminDB vendor code and install dependencies
+# Copy GarminDB vendor code and install Python dependencies
 COPY vendor/GarminDB /app/vendor/GarminDB
 RUN cd /app/vendor/GarminDB && \
     pip3 install --no-cache-dir -r requirements.txt --break-system-packages && \
     pip3 install --no-cache-dir --upgrade garth --break-system-packages
+
+# Remove build-time tools — compilers, headers, and git are not needed at runtime
+RUN apk del .build-deps
+
+# Create unprivileged user to run the application
+RUN addgroup -S app && adduser -S app -G app
 
 # Copy backend source
 COPY backend/ ./backend/
@@ -42,8 +59,12 @@ COPY scripts/ /app/scripts/
 # Copy schemas
 COPY schemas/ /app/schemas/
 
-# Create data and logs directories
-RUN mkdir -p /app/data /app/logs /app/data/garmin/HealthData/DBs /app/backend/data
+# Create data and logs directories and transfer ownership to the app user
+RUN mkdir -p /app/data /app/logs /app/data/garmin/HealthData/DBs /app/backend/data \
+    && chown -R app:app /app
+
+# Drop root privileges
+USER app
 
 # Set Python path for garmin-sync service
 ENV PYTHON_PATH=/usr/bin/python3

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { timingSafeEqual } from 'crypto';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { fileURLToPath } from 'url';
@@ -73,6 +74,37 @@ const authLimiter = rateLimit({
 });
 app.use('/api/garmin/login', authLimiter);
 app.use('/api/garmin/mfa', authLimiter);
+
+// API key authentication
+// Set BACKEND_API_KEY in .env (generate: openssl rand -hex 32)
+// /api/health is exempt so Docker healthchecks always work.
+const BACKEND_API_KEY = process.env.BACKEND_API_KEY || '';
+if (!BACKEND_API_KEY || BACKEND_API_KEY.length < 32) {
+  logger.warn(
+    'BACKEND_API_KEY is not set or too short (min 32 chars). ' +
+    'All API routes are unprotected. Generate one with: openssl rand -hex 32'
+  );
+}
+app.use('/api', (req, res, next) => {
+  // Health check is always public (used by Docker / load-balancer healthchecks)
+  if (req.path === '/health' || req.path.startsWith('/health/')) return next();
+
+  if (!BACKEND_API_KEY) return next(); // No key configured — warn was logged at startup
+
+  const provided = req.headers['x-api-key'] || '';
+  try {
+    const expectedBuf = Buffer.from(BACKEND_API_KEY, 'utf8');
+    const providedBuf = Buffer.from(provided, 'utf8');
+    const match =
+      expectedBuf.length === providedBuf.length &&
+      timingSafeEqual(expectedBuf, providedBuf);
+    if (!match) throw new Error('mismatch');
+  } catch {
+    logger.warn(`Unauthorized API request: ${req.method} ${req.path} from ${req.ip}`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
 
 // Request logging
 app.use((req, res, next) => {
