@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react-dom": "^19.2.5",
     "react-router-dom": "^6.21.1",
     "axios": "1.13.5",
     "date-fns": "^3.0.6",
