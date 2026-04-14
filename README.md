@@ -15,6 +15,7 @@ An AI-powered training coach that integrates with GarminDB to provide personaliz
 - **Help Documentation**: On-demand explanations for TSB, readiness scores, and training metrics
 - **Claude Desktop Integration**: MCP server for seamless AI coaching conversations
 - **Safety Guardrails**: Intelligent recommendations considering pain, illness, sleep, and training load
+- **Smart Goals**: Adaptive goal system — parse free-text goals into structured targets with weekly KPIs, auto-decompose into progressive training blocks, receive on_track/at_risk/off_track weekly progress, and get minimum-effective-dose adaptation when sessions are missed
 
 ## ⚠️ Security Notice
 
@@ -272,9 +273,254 @@ Open your Claude Desktop config file:
 
 Restart Claude Desktop after saving.
 
+### LM Studio MCP Integration
+
+LM Studio supports MCP servers via its `mcp.json` config file.
+
+| OS | Path |
+|----|------|
+| macOS | `~/.lmstudio/mcp.json` |
+| Windows | `%USERPROFILE%\.lmstudio\mcp.json` |
+| Linux | `~/.lmstudio/mcp.json` |
+
+```json
+{
+  "mcpServers": {
+    "coach": {
+      "command": "node",
+      "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
+      "env": {
+        "COACH_API_URL": "http://localhost:8088",
+        "LM_STUDIO_BASE_URL": "http://127.0.0.1:1234/v1",
+        "LM_STUDIO_MODEL": "qwen2.5-7b-instruct"
+      }
+    }
+  }
+}
+```
+
+> Replace `/path/to/coach` with the absolute path to your clone. Set `LM_STUDIO_MODEL` to whichever chat/instruct model you have loaded. If `LM_STUDIO_MODEL` is not set, the coach falls back to deterministic rule-based responses. Set `COACH_API_URL` to match the port your backend is running on (`8088` for base `docker-compose.yml`, `8080` for personal/shareable compose files or local dev).
+
+**⚠️ Model Compatibility for MCP Tool-Calling:**
+
+LM Studio's MCP implementation requires models that support **OpenAI function-calling format**. Not all models work.
+
+✅ **Compatible models** (tested):
+- `NousResearch/Hermes-2-Pro-Mistral-7B` or `Hermes-2-Pro-Llama-3-8B`
+- `NousResearch/Hermes-3-Llama-3.1-8B`
+- `mistralai/Mistral-7B-Instruct-v0.2`
+- `meetkai/functionary-small-v2.5`
+
+❌ **Incompatible models**:
+- `openai/gpt-oss-120b` — outputs custom format, not OpenAI function-calling JSON
+- `qwen2.5-7b-instruct` — no native function-calling support
+- Most base instruct models without function-calling fine-tuning
+
+If tool calls fail with parsing errors, either:
+1. Switch to a Hermes or functionary model in LM Studio, **OR**
+2. Use **Claude Desktop** instead (native MCP support, config above)
+
 **Full Docker documentation:**
 - [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) - Quick reference
 - [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) - Comprehensive guide
+
+### Ollama Integration
+
+Ollama provides a lightweight, CLI-friendly alternative to LM Studio for local AI inference. Unlike LM Studio, Ollama uses a native API (not OpenAI-compatible) and **does not support MCP**. Use Ollama for backend API endpoints and frontend UI only.
+
+**Prerequisites:**
+
+Install Ollama for your platform:
+
+| OS | Installation |
+|----|-------------|
+| macOS | `brew install ollama` |
+| Windows | Download from [ollama.com/download](https://ollama.com/download) |
+| Linux | `curl -fsSL https://ollama.com/install.sh \| sh` |
+
+**Local Development Setup:**
+
+```bash
+# 1. Start Ollama service
+ollama serve
+
+# 2. Pull a recommended model (in a new terminal)
+ollama pull llama3.1:8b-instruct-q4_K_M
+
+# 3. Configure coach to use Ollama
+cd backend
+echo "LLM_PROVIDER=ollama" >> .env
+echo "OLLAMA_URL=http://localhost:11434" >> .env
+
+# 4. Start the coach backend
+node scripts/coach_web_server.js
+```
+
+Verify it's working:
+```bash
+curl http://localhost:8080/api/health
+# Should show: {"status":"healthy","llm_provider":"ollama",...}
+```
+
+**Docker Deployment:**
+
+```bash
+# 1. Start Ollama on your host machine
+ollama serve
+
+# 2. Pull a model
+ollama pull llama3.1:8b-instruct-q4_K_M
+
+# 3. Configure coach to use Ollama
+echo "LLM_PROVIDER=ollama" >> .env
+echo "OLLAMA_URL=http://host.docker.internal:11434" >> .env
+
+# 4. Start coach in Docker
+docker-compose -f docker-compose.personal.yml up -d
+```
+
+**Linux Note:** If `host.docker.internal` doesn't resolve, try:
+- **Option A:** Set `OLLAMA_URL=http://172.17.0.1:11434` in `.env`
+- **Option B:** Add to your compose file:
+  ```yaml
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  ```
+
+**⚠️ Important Limitations:**
+
+- **No MCP Support**: Ollama cannot be used with Claude Desktop's MCP integration. For MCP features, use Claude Desktop (native) or LM Studio.
+- **API & UI Only**: Ollama works with the backend REST API and frontend dashboard, but not with MCP tools like `get_weekly_plan` or `set_current_athlete`.
+
+**Recommended Models:**
+
+Unlike LM Studio's MCP (which requires function-calling support), Ollama backend integration uses standard chat completions. **Any instruct-tuned model works**.
+
+**Best for coaching** (balance of quality and speed):
+- `llama3.1:8b-instruct-q4_K_M` — Excellent instruction-following, 4-bit quantized (~4.7 GB)
+- `mistral:7b-instruct-v0.2` — Fast and sports-aware (~4.1 GB)
+- `gemma2:9b-instruct-q5_K_M` — Google's model, strong reasoning (~5.8 GB)
+
+**Lighter/faster** (≤3GB RAM, lower-spec machines):
+- `phi3:mini` — Microsoft's 3.8B parameter model (~2.3 GB)
+- `mistral:7b-instruct-q4_0` — Aggressive quantization (~3.8 GB)
+
+**Higher quality** (requires GPU or ample RAM):
+- `llama3.1:70b-instruct-q4_K_M` — Best reasoning, needs 48GB+ RAM (~40 GB)
+- `mixtral:8x7b-instruct-q5_K_M` — Mixture of experts (~26 GB)
+
+**Pull a model:**
+```bash
+ollama pull llama3.1:8b-instruct-q4_K_M
+```
+
+**Switching Back to LM Studio:**
+
+```bash
+# Edit .env or backend/.env
+LLM_PROVIDER=lmstudio
+
+# Restart coach
+docker-compose restart coach  # Docker mode
+# OR
+node scripts/coach_web_server.js  # Local mode
+```
+
+### OpenAI Integration
+
+Use OpenAI's API for high-quality coaching responses powered by GPT-4 or GPT-4 Turbo. This is a cloud-based option that requires an API key and incurs usage costs.
+
+**Prerequisites:**
+
+1. **OpenAI API Key** — Get one from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. **API Credits** — Add payment method at [platform.openai.com/billing](https://platform.openai.com/billing)
+
+**Local Development Setup:**
+
+```bash
+# 1. Get your OpenAI API key from platform.openai.com
+
+# 2. Configure coach to use OpenAI
+cd backend
+echo "LLM_PROVIDER=openai" >> .env
+echo "OPENAI_API_KEY=sk-proj-..." >> .env  # Replace with your actual key
+echo "LLM_MODEL=gpt-4o-mini" >> .env       # Or gpt-4o, gpt-4-turbo
+
+# 3. Start the coach backend
+node src/server.js
+```
+
+Verify it's working:
+```bash
+curl http://localhost:8080/api/health
+# Should show: {"status":"healthy","llm_provider":"openai",...}
+```
+
+**Docker Deployment:**
+
+```bash
+# 1. Configure coach to use OpenAI
+echo "LLM_PROVIDER=openai" >> .env
+echo "OPENAI_API_KEY=sk-proj-..." >> .env
+echo "LLM_MODEL=gpt-4o-mini" >> .env
+
+# 2. Start coach in Docker
+docker-compose -f docker-compose.personal.yml up -d
+```
+
+**Recommended Models:**
+
+| Model | Cost (Input/Output) | Best For | Context Window |
+|-------|-------------------|----------|----------------|
+| `gpt-4o-mini` | $0.15 / $0.60 per 1M tokens | **Best balance** — Fast, affordable, high quality | 128K |
+| `gpt-4o` | $2.50 / $10.00 per 1M tokens | Premium quality, complex reasoning | 128K |
+| `gpt-4-turbo` | $10.00 / $30.00 per 1M tokens | Legacy option, use gpt-4o instead | 128K |
+| `gpt-3.5-turbo` | $0.50 / $1.50 per 1M tokens | Budget option, lower quality | 16K |
+
+> **Recommendation:** Start with **`gpt-4o-mini`** — excellent quality at ~$0.10 per 1,000 coaching requests.
+
+**Cost Estimation:**
+
+Typical coach usage:
+- **Weekly plan generation**: ~5,000 tokens → $0.004 with gpt-4o-mini
+- **Daily workout recommendation**: ~2,000 tokens → $0.002
+- **Monthly cost for active use**: ~$2-5 with gpt-4o-mini
+
+**Advanced Configuration:**
+
+```bash
+# Use custom OpenAI-compatible endpoint (e.g., Azure OpenAI)
+OPENAI_API_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment
+
+# Adjust generation parameters
+LLM_TEMPERATURE=0.7        # 0.0-2.0 (higher = more creative)
+LLM_MAX_TOKENS=2000        # Maximum response length
+LLM_TIMEOUT_MS=30000       # Request timeout in milliseconds
+```
+
+**⚠️ Important Notes:**
+
+- **Cloud-based**: Unlike Ollama/LM Studio, OpenAI sends data to external servers
+- **Requires internet**: No offline mode
+- **Usage costs**: Monitor your usage at [platform.openai.com/usage](https://platform.openai.com/usage)
+- **Rate limits**: Free tier has lower limits; paid accounts get higher throughput
+- **Data privacy**: Review [OpenAI's data usage policy](https://openai.com/policies/api-data-usage-policies)
+
+**MCP Support:**
+
+✅ **Works with MCP** — OpenAI can be used with the coach MCP server for Claude Desktop integration. The MCP server calls the coach backend API, which then uses OpenAI for LLM responses.
+
+**Switching Back to Local Models:**
+
+```bash
+# Edit .env or backend/.env
+LLM_PROVIDER=lmstudio  # or ollama
+
+# Restart coach
+docker-compose restart coach  # Docker mode
+# OR
+node src/server.js  # Local mode
+```
 
 ## Backend API
 
@@ -301,6 +547,18 @@ The coach now includes a full REST API:
 - `GET /api/patterns/discovery?email=<email>` - Discover training patterns
 - `GET /api/patterns/detection?email=<email>` - Detect pattern anomalies
 
+**Smart Goals:**
+- `POST /api/goals` - Parse and create a new goal (body: `{email, text, confirm}` — omit `confirm` for preview)
+- `GET /api/goals?email=<email>` - List active goals (add `include_draft=true` for draft block sub-goals)
+- `GET /api/goals/weekly-review?email=<email>&week_start=<YYYY-MM-DD>` - Weekly goal status review
+- `GET /api/goals/balance?email=<email>` - Multi-goal balance check with conflict detection
+- `GET /api/goals/:id?email=<email>` - Single goal with sub-goals and progress history
+- `PUT /api/goals/:id` - Update goal fields
+- `DELETE /api/goals/:id?email=<email>` - Soft-delete goal (status → abandoned)
+- `GET /api/goals/:id/progress` - Full weekly progress history
+- `POST /api/goals/:id/evaluate` - Evaluate goal progress for a week (body: `{email, week_start, completed_sessions, disruptions, recovery_signals}`)
+- `POST /api/goals/:id/adapt` - Propose minimum-effective-dose adaptation under disruption
+
 **Help Documentation:**
 - `GET /api/help/tsb` - TSB (Training Stress Balance) explanation
 - `GET /api/help/readiness` - Training readiness breakdown
@@ -308,6 +566,66 @@ The coach now includes a full REST API:
 - `GET /api/help/metrics` - All metrics documentation
 
 See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for full API documentation.
+
+## Smart Goals
+
+Smart Goals is the adaptive training goal system built into coach. It turns free-text goal descriptions into structured, measurable targets and keeps them aligned with your actual training week after week.
+
+### How it works
+
+Goals are organised in a three-level hierarchy:
+
+| Level | Example | Created by |
+|-------|---------|------------|
+| `long_term` | "Run a sub-4h marathon in October" | You, via natural language |
+| `block` | "8-week threshold block (weeks 1–8)" | Auto-decomposed by LLM on creation |
+| `weekly` | "Hit 50 km total this week" | Generated during weekly planning |
+
+When you save a new long-term goal the system immediately triggers an async LLM decomposition that creates all training blocks as `draft` sub-goals. Once you review and activate them they feed directly into weekly plan generation and daily workout recommendations.
+
+### Goal types
+
+| Type | Description |
+|------|-------------|
+| `performance` | Time/pace/power targets (races, PRs) |
+| `consistency` | Habit-based targets (run 4× per week) |
+| `health` | Body-composition or wellness outcomes |
+| `skill` | Technique or drill mastery |
+| `event` | Race/event-specific preparation |
+
+### Creating a goal
+
+1. Open the **Goals** tab in the UI (or call `POST /api/goals` / MCP `create_goal`)
+2. Describe your goal in plain English — e.g. *"I want to do an Ironman 70.3 next August, coming from a 5 km running base"*
+3. The LLM returns an interpreted preview: title, type, target date, metric, weekly KPIs, assumptions, confidence score, and draft training blocks
+4. Review the preview, then confirm to save
+
+### Weekly progress evaluation
+
+Run `POST /api/goals/:id/evaluate` (or the weekly diary) with that week's completed sessions. The LLM returns:
+- **status**: `on_track` / `at_risk` / `off_track`
+- **metric_value**: measured progress toward the target
+- **kpis_snapshot**: pass/fail for each weekly KPI
+- **min_effective_alt**: if not on_track, the minimum set of sessions to protect goal intent
+
+### Adaptation under disruption
+
+When life gets in the way, `POST /api/goals/:id/adapt` takes your disruptions (illness, travel, missed sessions) and recovery signals and returns a revised minimal-dose plan that keeps the goal alive without overloading you when you return.
+
+Multi-goal conflict detection is available via `GET /api/goals/balance` — it prioritises goals and flags training load conflicts with concrete weekly-allocation recommendations.
+
+### MCP tools (Claude Desktop)
+
+| Tool | Description |
+|------|-------------|
+| `get_active_goals` | List active goals with status icons |
+| `create_goal` | Parse and optionally save a new goal (preview_only mode available) |
+| `adapt_goals` | Propose a minimum-effective-dose plan under disruption |
+| `get_weekly_goal_review` | Per-goal weekly status, KPIs, and coaching narrative |
+
+### Context injection
+
+Active goals are automatically injected into every daily and weekly LLM context. The weekly plan marks which sessions serve which goals (`supports_goals`) and includes a `goal_alignment` summary showing projected goal status at week end.
 
 ## What is implemented
 
@@ -422,6 +740,7 @@ python scripts/import_garmindb_to_coach.py \
 │   ├── src/
 │   │   ├── routes/              # API endpoints
 │   │   │   ├── activity.js      # Activity verification endpoints
+│   │   │   ├── goals.js         # Smart Goals CRUD + evaluation endpoints
 │   │   │   ├── help.js          # Help documentation endpoints
 │   │   │   ├── patterns.js      # Pattern recognition endpoints
 │   │   │   ├── stats.js         # Training statistics endpoints
@@ -429,6 +748,8 @@ python scripts/import_garmindb_to_coach.py \
 │   │   ├── services/            # Business logic
 │   │   │   ├── activity-verification.js   # Activity verification service
 │   │   │   ├── auth-improved.js           # Encrypted authentication
+│   │   │   ├── goal-adaptation.js         # Min-effective-dose + multi-goal balance
+│   │   │   ├── goal-service.js            # Smart Goals CRUD + LLM evaluation
 │   │   │   ├── pattern-recognition.js     # Pattern analysis
 │   │   │   ├── stats-service.js           # Statistics calculations
 │   │   │   └── workout-recommendation.js  # Training recommendations
@@ -456,7 +777,8 @@ python scripts/import_garmindb_to_coach.py \
 ├── schemas/                      # JSON schema definitions
 │   ├── athlete_profile.v1.json
 │   ├── daily_metrics.v1.json
-│   └── recommendation.v1.json
+│   ├── recommendation.v1.json
+│   └── smart_goal.v1.json
 ├── storage/                      # Storage abstraction layer
 ├── vendor/GarminDB/             # GarminDB integration (submodule)
 ├── Dockerfile                    # Docker build
@@ -468,6 +790,14 @@ python scripts/import_garmindb_to_coach.py \
 │       └── docker-publish.yml   # CI/CD pipeline
 └── package.json                 # Node.js project config
 ```
+
+## Recent Improvements (Apr 2026)
+
+### Major Features ✨
+- **Smart Goals**: Adaptive context-aware goal system — free-text → structured targets → weekly KPIs → on_track/at_risk/off_track + min-effective-dose adaptation
+  - 3-level hierarchy: long_term → block (auto-decomposed) → weekly
+  - Active goals injected into all daily and weekly LLM contexts
+  - `/api/goals` REST API (10 endpoints), 4 new MCP tools, Goals tab in UI
 
 ## Recent Improvements (Feb 2026)
 
@@ -571,6 +901,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - `schemas/athlete_profile.v1.json`
 - `schemas/daily_metrics.v1.json`
 - `schemas/recommendation.v1.json`
+- `schemas/smart_goal.v1.json`
 
 ## Docker Hub
 
@@ -609,6 +940,7 @@ docker build -t 404i/garmin-coach-ai .
 2. ✅ ~~Add data freshness tracking~~
 3. ✅ ~~Import VO2 max and comprehensive activity metrics~~
 4. ✅ ~~Docker containerization~~
-5. Add OCR extraction from screenshots into `daily_metrics`
-6. Add stronger retry/resume behavior for long Garmin downloads
-7. Replace JSON store with Postgres for production readiness
+5. ✅ ~~Smart Goals: adaptive goal system with weekly KPI tracking and LLM-driven adaptation~~
+6. Add OCR extraction from screenshots into `daily_metrics`
+7. Add stronger retry/resume behavior for long Garmin downloads
+8. Replace JSON store with Postgres for production readiness

@@ -26,6 +26,17 @@ function env(name) {
 }
 
 /**
+ * Normalize Strava sport_type (fixes "?" placeholders)
+ * If sport_type is "?" or missing, use the activity type instead
+ */
+function normalizeSportType(sportType, activityType) {
+  if (!sportType || sportType === '?' || sportType === 'null') {
+    return activityType || 'other';
+  }
+  return sportType;
+}
+
+/**
  * Resolve email → user_id → first athlete_profiles.id (integer PK).
  * The strava tables reference this as their profile_id FK.
  */
@@ -216,7 +227,7 @@ export async function syncStravaActivities(profileId, opts = {}) {
         strava_id:        act.id,
         name:             act.name,
         type:             act.type,
-        sport_type:       act.sport_type,
+        sport_type:       normalizeSportType(act.sport_type, act.type),
         activity_date:    act.start_date,
         distance_km:      act.distance ? +(act.distance / 1000).toFixed(2) : null,
         duration_sec:     act.moving_time,

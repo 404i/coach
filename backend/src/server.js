@@ -34,6 +34,7 @@ import helpRoutes from './routes/help.js';
 import plannedActivitiesRoutes from './routes/planned-activities.js';
 import memoryRoutes from './routes/memory.js';
 import stravaRoutes from './routes/strava.js';
+import goalsRoutes from './routes/goals.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -134,6 +135,7 @@ app.use('/api/help', helpRoutes);
 app.use('/api/planned-activities', plannedActivitiesRoutes);
 app.use('/api/memory', memoryRoutes);
 app.use('/api/strava', stravaRoutes);
+app.use('/api/goals', goalsRoutes);
 
 // Serve static frontend in production
 if (process.env.NODE_ENV === 'production') {

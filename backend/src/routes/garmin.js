@@ -253,7 +253,7 @@ router.get('/activities', async (req, res) => {
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      query = query.where('profile_id', user.id);
+      query = query.where('user_id', user.id);
     }
     
     if (start_date) {
@@ -324,7 +324,7 @@ router.post('/import', async (req, res) => {
       const validDates = days.map(d => d.date).filter(Boolean);
       if (validDates.length > 0) {
         const rows = await db('daily_metrics')
-          .where({ profile_id: user.id })
+          .where({ user_id: user.id })
           .whereIn('date', validDates)
           .select('date');
         existingDates = new Set(rows.map(r => r.date));
@@ -342,13 +342,13 @@ router.post('/import', async (req, res) => {
 
       await db('daily_metrics')
         .insert({
-          profile_id: user.id,
+          user_id: user.id,
           date,
           metrics_data: JSON.stringify(day),
           synced_at: db.fn.now(),
           updated_at: db.fn.now()
         })
-        .onConflict(['profile_id', 'date'])
+        .onConflict(['user_id', 'date'])
         .merge(['metrics_data', 'synced_at', 'updated_at']);
 
       upserted++;
@@ -388,7 +388,7 @@ router.get('/last-sync', async (req, res) => {
     }
 
     const row = await db('daily_metrics')
-      .where({ profile_id: user.id })
+      .where({ user_id: user.id })
       .whereNotNull('synced_at')
       .orderBy('synced_at', 'desc')
       .select('synced_at')

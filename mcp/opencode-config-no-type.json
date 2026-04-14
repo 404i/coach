@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "mcp": {
+    "hexstrike-ai": {
+      "type": "local",
+      "command": [
+        "/Users/tsochkata/git/hexstrike-ai/.venv/bin/python3",
+        "/Users/tsochkata/git/hexstrike-ai/hexstrike_mcp.py",
+        "--server",
+        "http://localhost:8888"
+      ],
+      "enabled": true
+    },
+    "garmin-ai-coach": {
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer e7ff35eef1194dba2e0f1ed0d531dffa2e151ad4cfae919dd23a51940d464e2b"
+      },
+      "enabled": true
+    },
+    "eventlog-ops-dfir": {
+      "type": "local",
+      "command": [
+        "/Users/tsochkata/git/eventlog_ops/mcp/.venv/bin/python",
+        "/Users/tsochkata/git/eventlog_ops/mcp/server.py"
+      ],
+      "enabled": true
+    }
+  },
+
+  "tools": {
+    "hexstrike-ai": false
+  }
+}

@@ -4,18 +4,18 @@
  */
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
-import { getProfileIdFromEmail } from './stats-service.js';
+import { getProfileIdFromEmail, getUserIdFromEmail } from './stats-service.js';
 
 /**
  * Get all active insights and alerts for an athlete
  */
 export async function getInsightsAndAlerts(email) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
     
     // Get recent metrics (last 30 days)
     const metrics = await db('daily_metrics')
-      .where({ profile_id: profileId })
+      .where({ user_id: userId })
       .where('date', '>=', db.raw("date('now', '-30 days')"))
       .orderBy('date', 'desc');
     
@@ -38,7 +38,8 @@ export async function getInsightsAndAlerts(email) {
       ...detectInjuryRisk(parsedMetrics),
       ...detectOvertraining(parsedMetrics),
       ...detectRecoveryIssues(parsedMetrics),
-      ...detectHrvAnomalies(parsedMetrics)
+      ...detectHrvAnomalies(parsedMetrics),
+      ...await detectTSBAlerts(userId)
     ];
     
     const insights = [
@@ -46,7 +47,7 @@ export async function getInsightsAndAlerts(email) {
       ...detectPerformanceTrends(parsedMetrics)
     ];
     
-    const milestones = await detectMilestones(profileId, parsedMetrics);
+    const milestones = await detectMilestones(userId, parsedMetrics);
     
     return {
       alerts: alerts.sort((a, b) => severityToNumber(b.severity) - severityToNumber(a.severity)),
@@ -255,6 +256,91 @@ function detectHrvAnomalies(metrics) {
 }
 
 /**
+ * Detect TSB (Training Stress Balance) based fatigue/freshness alerts
+ * TSB = CTL - ATL (Form = Fitness - Fatigue)
+ * 
+ * Zones:
+ * - TSB < -30: Severe overreach (critical injury risk)
+ * - TSB -30 to -15: High fatigue (recovery needed)
+ * - TSB -15 to -5: Productive training zone
+ * - TSB -5 to +5: Freshness/maintenance
+ * - TSB +5 to +25: Fresh/rested
+ * - TSB > +25: Very fresh (detraining risk)
+ */
+async function detectTSBAlerts(userId) {
+  const alerts = [];
+  
+  // Get latest metrics with TSB
+  const latestMetric = await db('daily_metrics')
+    .where({ user_id: userId })
+    .orderBy('date', 'desc')
+    .first();
+  
+  if (!latestMetric) return alerts;
+  
+  const data = typeof latestMetric.metrics_data === 'string' 
+    ? JSON.parse(latestMetric.metrics_data) 
+    : latestMetric.metrics_data;
+  
+  const tsb = data.tsb;
+  const ctl = data.ctl; // Chronic Training Load (fitness)
+  const atl = data.atl; // Acute Training Load (fatigue)
+  
+  if (tsb == null) return alerts;
+  
+  // Critical overreach: TSB < -30
+  if (tsb < -30) {
+    alerts.push({
+      type: 'overreached',
+      severity: tsb < -50 ? 'critical' : 'high',
+      title: '🚨 Severe Overreach Detected',
+      message: `Your Training Stress Balance is ${tsb} (severe overreach). You are at high risk of injury or illness.`,
+      recommendation: 'Take at least 2-3 complete rest days immediately. Focus on recovery: sleep 8+ hours, nutrition, hydration. Consider medical consultation if you experience persistent fatigue, irritability, or poor sleep.',
+      data: { 
+        tsb, 
+        ctl: Math.round(ctl || 0), 
+        atl: Math.round(atl || 0), 
+        date: latestMetric.date 
+      }
+    });
+  }
+  // High fatigue: TSB -30 to -15
+  else if (tsb < -15) {
+    alerts.push({
+      type: 'fatigued',
+      severity: 'medium',
+      title: '⚠️ High Fatigue Load',
+      message: `Your TSB is ${tsb} (fatigued state). You are carrying significant accumulated fatigue.`,
+      recommendation: 'Reduce training intensity by 20-30%. Schedule 1-2 easy/recovery days this week. Monitor sleep quality and recovery metrics closely.',
+      data: { 
+        tsb, 
+        ctl: Math.round(ctl || 0), 
+        atl: Math.round(atl || 0), 
+        date: latestMetric.date 
+      }
+    });
+  }
+  // Very fresh (detraining risk): TSB > +25
+  else if (tsb > 25) {
+    alerts.push({
+      type: 'undertrained',
+      severity: 'low',
+      title: '📉 Very Fresh — Risk of Detraining',
+      message: `Your TSB is ${tsb} (very fresh/rested). Extended rest may lead to fitness loss.`,
+      recommendation: 'Increase training load gradually. Add 1-2 quality sessions this week. Consider if you\'re recovering from injury or illness before ramping up.',
+      data: { 
+        tsb, 
+        ctl: Math.round(ctl || 0), 
+        atl: Math.round(atl || 0), 
+        date: latestMetric.date 
+      }
+    });
+  }
+  
+  return alerts;
+}
+
+/**
  * Detect positive training patterns
  */
 function detectTrainingPatterns(metrics) {
@@ -334,7 +420,7 @@ function detectPerformanceTrends(metrics) {
 /**
  * Detect milestones and achievements
  */
-async function detectMilestones(profileId, metrics) {
+async function detectMilestones(userId, metrics) {
   const milestones = [];
   
   // Check training streak
@@ -362,7 +448,7 @@ async function detectMilestones(profileId, metrics) {
     
     // Fetch all-time data for comparison
     const allMetrics = await db('daily_metrics')
-      .where({ profile_id: profileId })
+      .where({ user_id: userId })
       .orderBy('date', 'desc');
     
     const parsedAll = allMetrics.map(m => ({

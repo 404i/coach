@@ -3,49 +3,26 @@
  * Smart ramp rate analysis, load distribution, volume/intensity balance
  */
 import db from '../db/index.js';
-import sqlite3 from 'sqlite3';
 import logger from '../utils/logger.js';
-import { getProfileIdFromEmail } from './stats-service.js';
-
-const garminActivityDbPath = process.env.GARMIN_ACTIVITY_DB_PATH || 
-  '/app/data/garmin/HealthData/DBs/garmin_activities.db';
-
-/**
- * Query GarminDB for activities
- * Returns empty array if the DB file doesn't exist (e.g. server without GarminDB sync)
- */
-async function queryGarminActivities(query, params = []) {
-  return new Promise((resolve) => {
-    const garminDb = new sqlite3.Database(garminActivityDbPath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) {
-        // DB doesn't exist or can't be opened — degrade gracefully
-        logger.warn(`GarminDB not available at ${garminActivityDbPath}, skipping activity query: ${err.message}`);
-        return resolve([]);
-      }
-      
-      garminDb.all(query, params, (err, rows) => {
-        garminDb.close();
-        if (err) {
-          logger.error('Error querying GarminDB:', err);
-          return resolve([]);
-        }
-        resolve(rows || []);
-      });
-    });
-  });
-}
+import { queryActivitiesForProfile } from './activity-analysis.js';
+import { parseElapsedTime } from '../utils/activity-schema-mapper.js';
 
 /**
  * Comprehensive training load optimization analysis
  */
 export async function getLoadOptimization(email, weeks = 12) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    // Get user ID - both daily_metrics and activities tables use user.id as profile_id
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
     const days = weeks * 7;
     
     // Get metrics from coach DB
     const metrics = await db('daily_metrics')
-      .where({ profile_id: profileId })
+      .where({ user_id: user.id })
       .where('date', '>=', db.raw(`date('now', '-${days} days')`))
       .orderBy('date', 'desc');
     
@@ -58,20 +35,9 @@ export async function getLoadOptimization(email, weeks = 12) {
       ...( typeof m.metrics_data === 'string' ? JSON.parse(m.metrics_data) : m.metrics_data)
     })).reverse(); // Oldest to newest for progression analysis
     
-    // Get activities from GarminDB for sport distribution
+    // Get activities from app database for sport distribution
     const startDate = parsedMetrics[0].date;
-    const activities = await queryGarminActivities(`
-      SELECT 
-        date(start_time) as date,
-        sport,
-        training_load,
-        elapsed_time,
-        avg_hr,
-        max_hr
-      FROM activities
-      WHERE start_time >= ?
-      ORDER BY start_time
-    `, [startDate]);
+    const activities = await queryActivitiesForProfile(email, startDate);
     
     // Run all optimization analyses
     const rampRate = analyzeRampRate(parsedMetrics);
@@ -227,11 +193,11 @@ function analyzeSportDistribution(activities, metrics) {
     
     sportStats[sport].sessions++;
     sportStats[sport].total_load += a.training_load || 0;
-    sportStats[sport].total_time_minutes += parseElapsedTime(a.elapsed_time);
+    sportStats[sport].total_time_minutes += parseElapsedTime(a.elapsed_time) / 60;
     if (a.avg_hr) sportStats[sport].avg_hr.push(a.avg_hr);
     
     totalLoad += a.training_load || 0;
-    totalTime += parseElapsedTime(a.elapsed_time);
+    totalTime += parseElapsedTime(a.elapsed_time) / 60;
   });
   
   // Calculate percentages and averages
@@ -654,21 +620,6 @@ function calculateOverallOptimizationScore(rampRate, sportDist, volIntensity, fi
   }
   
   return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-/**
- * Parse elapsed time string to minutes
- */
-function parseElapsedTime(timeStr) {
-  if (!timeStr) return 0;
-  
-  const parts = timeStr.split(':').map(p => parseFloat(p));
-  if (parts.length === 3) {
-    return parts[0] * 60 + parts[1] + parts[2] / 60;
-  } else if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  return 0;
 }
 
 /**

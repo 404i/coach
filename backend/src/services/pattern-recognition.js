@@ -9,19 +9,10 @@
  */
 
 import db from '../db/index.js';
-import sqlite3 from 'sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import logger from '../utils/logger.js';
 import { subDays, addDays, differenceInDays, format, startOfWeek, endOfWeek } from 'date-fns';
 import { addDataContextToResponseByProfileId } from '../middleware/data-freshness.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Path to GarminDB activities database
-const garminActivityDbPath = process.env.GARMIN_ACTIVITIES_DB || 
-  join(__dirname, '../../../data/garmin/HealthData/DBs/garmin_activities.db');
+import { mapAppActivityToGarminSchema } from '../utils/activity-schema-mapper.js';
 
 // ============================================================================
 // PATTERN DISCOVERY
@@ -91,11 +82,32 @@ export async function discoverPatterns(profileId, lookbackDays = 90) {
         age_days: Math.round(lookbackDays * 0.6)
       });
     }
+    // Occasional pattern check (0.5-1 times per week = 2-4x per month)
+    else if (frequencyPerWeek >= 0.5 && frequencyPerWeek < 1 && daysWithActivity >= 3) {
+      const confidence = Math.min(80, Math.round(frequencyPerWeek * 40));
+      const durations = sportActivities.map(a => a.duration_min).filter(d => d > 0);
+      const typicalDuration = durations.length > 0 ? median(durations) : null;
+      
+      patterns.push({
+        type: 'occasional',
+        sport,
+        frequency: parseFloat(frequencyPerWeek.toFixed(1)),
+        confidence,
+        typical_duration: typicalDuration,
+        typical_time_slot: findMostCommonTimeSlot(sportActivities),
+        occurrences: daysWithActivity,
+        age_days: Math.round(lookbackDays * 0.5)
+      });
+    }
   }
   
   // Multi-activity patterns
   const multiActivityPatterns = findMultiActivityPatterns(activities, lookbackDays);
   patterns.push(...multiActivityPatterns);
+  
+  // ── Real-time Multi-Activity Detection ──────────────────────────────────
+  // Backfill multi_activity_days table for existing data (Issue #6 fix)
+  await detectAndTrackMultiActivityDays(profileId, activities);
   
   console.log(`Discovered ${patterns.length} patterns`);
   const result = { patterns, activities_analyzed: activities.length };
@@ -405,6 +417,47 @@ export async function trackMultiActivityDay(profileId, date, activities) {
   };
 }
 
+/**
+ * Detect and track multi-activity days from historical data (Issue #6 fix)
+ * This backfills the multi_activity_days table for existing activities
+ */
+async function detectAndTrackMultiActivityDays(profileId, activities) {
+  if (!activities || activities.length === 0) return { tracked: 0, message: 'No activities to process' };
+  
+  // Group activities by date
+  const byDate = activities.reduce((acc, activity) => {
+    const date = format(new Date(activity.date), 'yyyy-MM-dd');
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(activity);
+    return acc;
+  }, {});
+  
+  let trackedCount = 0;
+  
+  // Process each date with 2+ activities
+  for (const [date, dateActivities] of Object.entries(byDate)) {
+    if (dateActivities.length >= 2) {
+      try {
+        // Check if already tracked
+        const existing = await db('multi_activity_days')
+          .where({ profile_id: profileId, date })
+          .first();
+        
+        if (!existing) {
+          // Track this multi-activity day
+          await trackMultiActivityDay(profileId, date, dateActivities);
+          trackedCount++;
+          logger.info(`Backfilled multi-activity day: ${date} (${dateActivities.length} activities)`);
+        }
+      } catch (error) {
+        logger.warn(`Failed to backfill multi-activity day ${date}:`, error.message);
+      }
+    }
+  }
+  
+  return { tracked: trackedCount, message: `Tracked ${trackedCount} multi-activity days` };
+}
+
 // ============================================================================
 // PERFORMANCE GAP DETECTION
 // ============================================================================
@@ -683,63 +736,60 @@ function getRecommendedTiming(modality) {
 // ============================================================================
 
 /**
- * Query GarminDB for activities using sqlite3
+ * Query app database for activities and map to legacy schema
  */
-async function queryGarminActivities(query, params = []) {
-  return new Promise((resolve, reject) => {
-    const garminDb = new sqlite3.Database(garminActivityDbPath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) {
-        logger.error('Error opening GarminDB:', err);
-        return reject(err);
-      }
-      
-      garminDb.all(query, params, (err, rows) => {
-        garminDb.close();
-        if (err) {
-          logger.error('Error querying GarminDB:', err);
-          return reject(err);
-        }
-        resolve(rows || []);
-      });
+async function queryActivitiesForProfile(profileId, startDate, sportFilter = null) {
+  // Get user_id from athlete_profile - activities table uses user.id as profile_id
+  const athleteProfile = await db('athlete_profiles')
+    .select('user_id')
+    .where('id', profileId)
+    .first();
+  
+  if (!athleteProfile) {
+    throw new Error('Athlete profile not found');
+  }
+  
+  let query = db('activities')
+    .where({ user_id: athleteProfile.user_id })
+    .where('date', '>=', startDate)  // Use date field instead of start_time
+    .orderBy('date', 'desc');
+  
+  if (sportFilter) {
+    query = query.where(function() {
+      this.where('sport_type', 'like', `%${sportFilter}%`)
+        .orWhere('activity_type', 'like', `%${sportFilter}%`);
     });
-  });
+  }
+  
+  const activities = await query;
+  
+  // Map to legacy GarminDB schema for backward compatibility
+  return activities.map(mapAppActivityToGarminSchema);
 }
 
 async function getHistoricalActivities(profileId, lookbackDays) {
   const sinceDate = format(subDays(new Date(), lookbackDays), 'yyyy-MM-dd');
   
-  // Query GarminDB for activities
-  const activities = await queryGarminActivities(`
-    SELECT 
-      activity_id as id,
-      start_time as date,
-      sport,
-      sub_sport as activity_type,
-      elapsed_time as duration_sec
-    FROM activities
-    WHERE start_time >= ?
-    ORDER BY start_time DESC
-  `, [sinceDate]);
+  // Query app database for activities
+  const activities = await queryActivitiesForProfile(profileId, sinceDate);
   
-  // Convert duration to minutes and add time slot
+  // Convert to expected format with duration in minutes and time slot
   return activities.map(a => ({
-    ...a,
-    duration_min: Math.round((a.duration_sec || 0) / 60),
-    time_slot: getTimeSlot(a.date),
-    training_load: estimateTrainingLoad(a)
+    id: a.raw_data?.activityId || null,
+    date: a.start_time,
+    sport: a.sport,
+    activity_type: a.sub_sport,
+    duration_sec: a.elapsed_time,
+    duration_min: Math.round((a.elapsed_time || 0) / 60),
+    time_slot: getTimeSlot(a.start_time),
+    training_load: a.training_load || estimateTrainingLoad(a)
   }));
 }
 
 async function getRecentActivities(profileId, sport, lookbackDays) {
   const sinceDate = format(subDays(new Date(), lookbackDays), 'yyyy-MM-dd');
   
-  const activities = await queryGarminActivities(`
-    SELECT *
-    FROM activities
-    WHERE start_time >= ?
-    AND (sport LIKE ? OR sub_sport LIKE ?)
-    ORDER BY start_time DESC
-  `, [sinceDate, `%${sport}%`, `%${sport}%`]);
+  const activities = await queryActivitiesForProfile(profileId, sinceDate, sport);
   
   return activities.map(a => ({
     ...a,

@@ -8,12 +8,6 @@ WORKDIR /app
 # Apply latest Alpine OS security patches before anything else
 RUN apk upgrade --no-cache
 
-# Apply latest Alpine OS security patches before anything else
-RUN apk upgrade --no-cache
-
-# Upgrade npm to get patched bundled dependencies (cross-spawn, minimatch, etc.)
-RUN npm install -g npm@latest
-
 # Install runtime system packages
 RUN apk add --no-cache \
     python3 \
@@ -32,7 +26,7 @@ RUN apk add --no-cache --virtual .build-deps \
 # Copy backend package files and install Node dependencies.
 # sqlite3 is compiled from source here (requires build-base).
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci --only=production && \
+RUN cd backend && npm install --production && \
     npm rebuild sqlite3 --build-from-source
 
 # Copy GarminDB vendor code and install Python dependencies

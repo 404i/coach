@@ -116,13 +116,26 @@ router.get('/activities', async (req, res) => {
       type,
     });
 
-    // Strip raw_data from response for brevity
-    const cleaned = activities.map(a => {
-      const { raw_data, ...rest } = a;
-      return rest;
-    });
+    // Format activities with correct field mapping (DB columns → response fields)
+    const formatted = activities.map(a => ({
+      id: a.activity_id,
+      strava_id: a.strava_id,
+      name: a.name,
+      type: a.type,
+      sport_type: a.sport_type,
+      date: a.activity_date,
+      distance: a.distance_km,
+      duration: a.duration_sec,
+      elevation_gain: a.elevation_gain_m,
+      avg_hr: a.avg_hr,
+      max_hr: a.max_hr,
+      avg_power: a.avg_power,
+      normalized_power: a.normalized_power,
+      training_load: a.training_load,
+      synced_at: a.synced_at,
+    }));
 
-    res.json({ activities: cleaned, total: cleaned.length });
+    res.json({ activities: formatted, total: formatted.length });
   } catch (error) {
     logger.error('Strava activities query failed:', error);
     res.status(500).json({ error: 'Query failed', message: error.message });

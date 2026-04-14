@@ -19,11 +19,13 @@ function getLLMConfig() {
     provider: process.env.LLM_PROVIDER || 'lmstudio',
     lmStudioUrl: process.env.LM_STUDIO_URL || 'http://localhost:1234/v1',
     ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+    openaiUrl: process.env.OPENAI_API_URL || 'https://api.openai.com/v1',
     apiKey: process.env.LM_STUDIO_API_KEY,
+    openaiApiKey: process.env.OPENAI_API_KEY,
     timeout: parseInt(process.env.LLM_TIMEOUT_MS) || 120000,
     temperature: parseFloat(process.env.LLM_TEMPERATURE) || 0.7,
     maxTokens: parseInt(process.env.LLM_MAX_TOKENS) || 2000,
-    model: process.env.LLM_MODEL || 'local-model'
+    model: process.env.LLM_MODEL || (process.env.LLM_PROVIDER === 'openai' ? 'gpt-4o-mini' : 'local-model')
   };
 }
 
@@ -42,7 +44,7 @@ try {
 /**
  * Call LLM API (supports both LM Studio and Ollama)
  */
-async function callLLM(messages, options = {}) {
+export async function callLLM(messages, options = {}) {
   const startTime = Date.now();
   const config = getLLMConfig();
   
@@ -74,6 +76,34 @@ async function callLLM(messages, options = {}) {
       
       content = response.data.message.content;
       tokensUsed = response.data.eval_count || null;
+      
+    } else if (config.provider === 'openai') {
+      // OpenAI API format
+      const requestBody = {
+        model: options.model || config.model,
+        messages,
+        temperature: options.temperature || config.temperature,
+        max_tokens: options.maxTokens || config.maxTokens
+      };
+      
+      if (!config.openaiApiKey) {
+        throw new Error('OPENAI_API_KEY environment variable is required for OpenAI provider');
+      }
+      
+      response = await axios.post(
+        `${config.openaiUrl}/chat/completions`,
+        requestBody,
+        {
+          timeout: config.timeout,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.openaiApiKey}`
+          }
+        }
+      );
+      
+      content = response.data.choices[0].message.content;
+      tokensUsed = response.data.usage?.total_tokens || null;
       
     } else {
       // LM Studio (OpenAI-compatible) API format

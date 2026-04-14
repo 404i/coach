@@ -3,7 +3,8 @@ import logger from '../utils/logger.js';
 import { addDataContextToResponse } from '../middleware/data-freshness.js';
 
 /**
- * Helper function to get profile_id from email
+ * Helper function to get profile_id from email (returns athlete_profiles.id)
+ * Use for tables that reference athlete_profiles: diary_entries, training_patterns, etc.
  */
 export async function getProfileIdFromEmail(email) {
   const user = await db('users').where('garmin_email', email).first();
@@ -20,6 +21,18 @@ export async function getProfileIdFromEmail(email) {
 }
 
 /**
+ * Helper function to get user_id from email (returns users.id)
+ * Use for tables that reference users: activities, daily_metrics
+ */
+export async function getUserIdFromEmail(email) {
+  const user = await db('users').where('garmin_email', email).first();
+  if (!user) {
+    throw new Error('User not found');
+  }
+  return user.id;
+}
+
+/**
  * Get training load trend analysis (acute vs chronic load)
  * Acute Load = 7-day average
  * Chronic Load = 42-day average (6 weeks)
@@ -30,13 +43,13 @@ export async function getProfileIdFromEmail(email) {
  */
 export async function getTrainingLoadTrend(email, days = 60) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
 
     const endDate = new Date().toISOString().split('T')[0];
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const metrics = await db('daily_metrics')
-      .where('profile_id', profileId)
+      .where('user_id', userId)
       .whereBetween('date', [startDate, endDate])
       .select('date', 'metrics_data')
       .orderBy('date', 'desc');
@@ -45,6 +58,11 @@ export async function getTrainingLoadTrend(email, days = 60) {
       date: m.date,
       training_load: JSON.parse(m.metrics_data).training_load || 0
     }));
+
+    // Detect stale training load data (no non-zero loads in last 7 days)
+    const recent7 = loadData.slice(0, 7);
+    const recentNonZero = recent7.filter(d => d.training_load > 0).length;
+    const loadDataStale = recentNonZero === 0 && loadData.length > 0;
 
     // Calculate acute load (7-day average)
     const acuteLoad = calculateRollingAverage(loadData, 7);
@@ -104,6 +122,8 @@ export async function getTrainingLoadTrend(email, days = 60) {
         acute_load: Math.round(acuteLoad),
         chronic_load: Math.round(chronicLoad),
         acute_chronic_ratio: acr ? parseFloat(acr.toFixed(2)) : null,
+        load_data_stale: loadDataStale,
+        recent_load_days: recentNonZero,
         status,
         recommendation
       },
@@ -123,13 +143,13 @@ export async function getTrainingLoadTrend(email, days = 60) {
  */
 export async function getRecoveryTrend(email, days = 60) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
 
     const endDate = new Date().toISOString().split('T')[0];
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const metrics = await db('daily_metrics')
-      .where('profile_id', profileId)
+      .where('user_id', userId)
       .whereBetween('date', [startDate, endDate])
       .select('date', 'metrics_data')
       .orderBy('date', 'desc');
@@ -241,13 +261,13 @@ export async function getRecoveryTrend(email, days = 60) {
  */
 export async function getHrvBaseline(email, days = 60) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
 
     const endDate = new Date().toISOString().split('T')[0];
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const metrics = await db('daily_metrics')
-      .where('profile_id', profileId)
+      .where('user_id', userId)
       .whereBetween('date', [startDate, endDate])
       .select('date', 'metrics_data')
       .orderBy('date', 'asc');
@@ -349,13 +369,13 @@ export async function getHrvBaseline(email, days = 60) {
  */
 export async function getTrainingStressBalance(email, days = 60) {
   try {
-    const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
 
     const endDate = new Date().toISOString().split('T')[0];
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const metrics = await db('daily_metrics')
-      .where('profile_id', profileId)
+      .where('user_id', userId)
       .whereBetween('date', [startDate, endDate])
       .select('date', 'metrics_data')
       .orderBy('date', 'asc');

@@ -136,7 +136,17 @@ export const garminHandlers = {
     );
 
     if (data.data && Array.isArray(data.data)) {
-      data.data.forEach(metric => { delete metric.raw_garth_data; });
+      data.data.forEach(metric => {
+        delete metric.raw_garth_data;
+        // Parse metrics_data JSON string to object
+        if (typeof metric.metrics_data === 'string') {
+          try {
+            metric.metrics_data = JSON.parse(metric.metrics_data);
+          } catch (e) {
+            metric.metrics_data = {};
+          }
+        }
+      });
     }
 
     let missingFields = [];

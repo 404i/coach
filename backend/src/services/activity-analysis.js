@@ -1,55 +1,35 @@
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
-import sqlite3 from 'sqlite3';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Path to GarminDB activities database
-const garminActivityDbPath = process.env.GARMIN_ACTIVITY_DB_PATH || 
-  join(__dirname, '../../../data/garmin/HealthData/DBs/garmin_activities.db');
+import { mapAppActivityToGarminSchema } from '../utils/activity-schema-mapper.js';
 
 /**
- * Activity Analysis Service
- * Analyzes sport-specific training patterns and generates targeted recommendations
+ * Query app database for activities and map to legacy schema
+ * @param {string} email - Athlete email
+ * @param {string} startDate - Start date filter (YYYY-MM-DD)
+ * @param {string} sport - Optional sport filter  
  */
-
-/**
- * Helper to get profile_id from email
- */
-async function getProfileIdFromEmail(email) {
+export async function queryActivitiesForProfile(email, startDate, sport = null) {
+  // Get user ID - activities table uses user.id as profile_id
   const user = await db('users').where('garmin_email', email).first();
-  if (!user) throw new Error('User not found');
+  if (!user) {
+    throw new Error('User not found');
+  }
   
-  const profile = await db('athlete_profiles').where('user_id', user.id).first();
-  if (!profile) throw new Error('Athlete profile not found');
+  let query = db('activities')
+    .where({ user_id: user.id })
+    .where('date', '>=', startDate)
+    .orderBy('start_time', 'desc');
   
-  return profile.id;
-}
-
-/**
- * Query GarminDB for activities
- */
-async function queryGarminActivities(query, params = []) {
-  return new Promise((resolve, reject) => {
-    const garminDb = new sqlite3.Database(garminActivityDbPath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) {
-        logger.error('Error opening GarminDB:', err);
-        return reject(err);
-      }
-      
-      garminDb.all(query, params, (err, rows) => {
-        garminDb.close();
-        if (err) {
-          logger.error('Error querying GarminDB:', err);
-          return reject(err);
-        }
-        resolve(rows || []);
-      });
-    });
-  });
+  if (sport) {
+    // Match on activity_type (e.g., "indoor_cycling") using LIKE pattern
+    // since sport_type is numeric (2=cycling, 5=swimming, etc.)
+    query = query.where('activity_type', 'like', `%${sport}%`);
+  }
+  
+  const activities = await query;
+  
+  // Map to legacy GarminDB schema for backward compatibility
+  return activities.map(mapAppActivityToGarminSchema);
 }
 
 /**
@@ -58,25 +38,9 @@ async function queryGarminActivities(query, params = []) {
  */
 export async function getActivityDistribution(email, days = 30) {
   try {
-    await getProfileIdFromEmail(email); // Validate user exists
-    
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
-    const activities = await queryGarminActivities(`
-      SELECT 
-        sport,
-        sub_sport,
-        start_time,
-        distance,
-        elapsed_time,
-        training_load,
-        avg_hr,
-        avg_speed,
-        calories
-      FROM activities
-      WHERE start_time >= ?
-      ORDER BY start_time DESC
-    `, [startDate]);
+    const activities = await queryActivitiesForProfile(email, startDate);
     
     // Group by sport
     const sportStats = {};
@@ -110,7 +74,7 @@ export async function getActivityDistribution(email, days = 30) {
       
       if (sportStats[sport].recent_activities.length < 5) {
         sportStats[sport].recent_activities.push({
-          date: activity.start_time.split(' ')[0],
+          date: activity.date,
           sub_sport: activity.sub_sport,
           distance: activity.distance,
           duration_minutes: durationMinutes,
@@ -207,28 +171,15 @@ export async function getSportSpecificInsights(email, days = 30) {
  */
 export async function getSportSpecificWorkouts(email, sport, intensity = 'moderate') {
   try {
-    await getProfileIdFromEmail(email); // Validate user exists
-    
     // Get recent activities for this sport to establish baseline
     const startDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
-    const activities = await queryGarminActivities(`
-      SELECT 
-        start_time,
-        sub_sport,
-        distance,
-        elapsed_time,
-        training_load,
-        avg_hr,
-        avg_speed,
-        avg_cadence
-      FROM activities
-      WHERE sport = ? AND start_time >= ?
-      ORDER BY start_time DESC
-      LIMIT 10
-    `, [sport, startDate]);
+    const activities = await queryActivitiesForProfile(email, startDate, sport);
     
-    if (activities.length === 0) {
+    // Limit to 10 most recent
+    const recentActivities = activities.slice(0, 10);
+    
+    if (recentActivities.length === 0) {
       return {
         sport,
         message: `No recent ${sport} activities found. Starting with beginner-friendly recommendations.`,
@@ -237,7 +188,7 @@ export async function getSportSpecificWorkouts(email, sport, intensity = 'modera
     }
     
     // Calculate baseline metrics
-    const baseline = calculateSportBaseline(activities, sport);
+    const baseline = calculateSportBaseline(recentActivities, sport);
     
     // Generate structured workouts
     const workouts = generateSportWorkouts(sport, intensity, baseline);
@@ -636,12 +587,18 @@ function generateBeginnerWorkouts(sport, intensity) {
 }
 
 /**
- * Parse time string to minutes (HH:MM:SS.mmm or hh:mm:ss)
+ * Parse elapsed time from seconds or HH:MM:SS format to minutes
  */
-function parseElapsedTime(timeStr) {
-  if (!timeStr) return 0;
+function parseElapsedTime(timeValue) {
+  if (!timeValue) return 0;
   
-  const parts = timeStr.split(':').map(p => parseFloat(p));
+  // If it's a number, assume seconds (from app database)
+  if (typeof timeValue === 'number') {
+    return timeValue / 60; // Convert seconds to minutes
+  }
+  
+  // If it's a string in HH:MM:SS format (legacy)
+  const parts = String(timeValue).split(':').map(p => parseFloat(p));
   if (parts.length === 3) {
     return parts[0] * 60 + parts[1] + parts[2] / 60;
   } else if (parts.length === 2) {

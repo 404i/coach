@@ -22,6 +22,10 @@ ANALYSIS REQUIRED:
 - Upcoming events or goals
 - Athlete's preferred training days and time availability
 - Training mode from context (week_by_week|event_driven|block_periodization)
+- Active Smart Goals: Check context.active_goals[]. For each goal:
+  → Note its current status (on_track/at_risk/off_track) and weeks_remaining
+  → Include at least one session per week that directly serves each active goal
+  → If a goal is at_risk or off_track, increase priority for sessions serving it
 
 PLANNED ACTIVITIES INTEGRATION:
 - If athlete mentioned specific activities for the week ("yoga tonight", "DH park Saturday", "race next weekend"):
@@ -58,9 +62,10 @@ Return JSON with this EXACT structure:
         "estimated_tss": 35
       },
       "optional_second_workout": null,
-      "reasoning": "Why this workout on this day"
+      "reasoning": "Why this workout on this day",
+      "supports_goals": []
     },
-    // ... 6 more days
+    // ... 6 more days (each day entry must include supports_goals array)
   ],
   "volume_comparison": {
     "last_week_min": 220,
@@ -78,8 +83,19 @@ Return JSON with this EXACT structure:
   ],
   "coach_message": "Motivational weekly overview with key focus areas",
   "success_metrics": "What defines a successful week",
-  "flexibility_notes": "Which workouts can be swapped if life happens"
+  "flexibility_notes": "Which workouts can be swapped if life happens",
+  "goal_alignment": [
+    {
+      "goal_id": 1,
+      "goal_title": "Goal title",
+      "sessions_serving_goal": ["Tuesday tempo", "Saturday long ride"],
+      "projected_status": "on_track|at_risk|off_track"
+    }
+  ]
 }
+
+goal_alignment: For each goal in context.active_goals[], note which planned sessions serve it and the projected end-of-week status.
+supports_goals: Array of goal_ids (integers) that this session directly addresses. Empty array [] if no active goals are served.
 
 CRITICAL RULES:
 - sport field MUST be EXACTLY one of these values: run, bike, swim, strength, yoga, hiit, walk, rest (no other values, no "running", no "cycling", use exact enum values)

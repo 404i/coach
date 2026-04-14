@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import logger from '../utils/logger.js';
 import db from '../db/index.js';
+import { trackMultiActivityDay } from './pattern-recognition.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -160,8 +161,39 @@ export async function validateSession(email) {
  */
 export async function syncDateRange(email, startDate, endDate) {
   try {
-    const session = await getSession(email);
+    // ── Pre-Sync Validation ────────────────────────────────────────────────
+    
+    // Validate user exists
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) {
+      throw new Error(`No Garmin authentication found for ${email}. Please run authenticate_garmin first.`);
+    }
+    
+    // Validate user has auth tokens
+    if (!user.garth_session) {
+      throw new Error(`No Garmin authentication found for ${email}. Please run authenticate_garmin first.`);
+    }
+    
+    // Validate date range
+    const today = new Date().toISOString().split('T')[0];
+    if (startDate > endDate) {
+      throw new Error(`Invalid date range: start_date (${startDate}) cannot be after end_date (${endDate})`);
+    }
+    if (startDate > today || endDate > today) {
+      throw new Error(`Cannot sync future dates. Today is ${today}, requested: ${startDate} to ${endDate}`);
+    }
+    
+    // Parse session
+    let session;
+    try {
+      session = JSON.parse(user.garth_session);
+    } catch (error) {
+      throw new Error(`Invalid Garmin session data for ${email}. Please re-authenticate.`);
+    }
+    
     logger.info(`Syncing Garmin data for ${email} from ${startDate} to ${endDate}`);
+    
+    // ── Execute Sync ───────────────────────────────────────────────────────
     
     const data = await executeGarth('sync', {
       session,
@@ -175,17 +207,11 @@ export async function syncDateRange(email, startDate, endDate) {
       data.errors.forEach(err => logger.warn(`  - ${err}`));
     }
     
-    // Get user profile_id
-    const user = await db('users').where('garmin_email', email).first();
-    if (!user) {
-      throw new Error(`User not found: ${email}`);
-    }
-    
     // Pre-fetch all activities for every date in one query to avoid N+1
     const allSyncDates = Object.keys(data.dates);
     const allActivities = allSyncDates.length > 0
       ? await db('activities')
-          .where('profile_id', user.id)
+          .where('user_id', user.id)
           .whereRaw(
             `DATE(date) IN (${allSyncDates.map(() => '?').join(',')})`,
             allSyncDates
@@ -234,7 +260,7 @@ export async function syncDateRange(email, startDate, endDate) {
       };
       
       const dailyMetric = {
-        profile_id: user.id,
+        user_id: user.id,
         date,
         metrics_data: JSON.stringify(metricsData),
         raw_garth_data: JSON.stringify(metrics),
@@ -244,7 +270,7 @@ export async function syncDateRange(email, startDate, endDate) {
       
       await db('daily_metrics')
         .insert(dailyMetric)
-        .onConflict(['profile_id', 'date'])
+        .onConflict(['user_id', 'date'])
         .merge(['metrics_data', 'raw_garth_data', 'synced_at', 'updated_at']);
     }
     
@@ -279,7 +305,7 @@ export async function syncDateRange(email, startDate, endDate) {
           logger.info(`Inserting activity: ${activity.activityId} - ${activity.activityName} on ${activityDate}`);
           
           const activityData = {
-            profile_id: user.id,
+            user_id: user.id,
             activity_id: String(activity.activityId),
             activity_name: activity.activityName,
             activity_type: activity.activityType?.typeKey || null,
@@ -322,6 +348,37 @@ export async function syncDateRange(email, startDate, endDate) {
 
     
     logger.info(`Successfully synced and stored ${Object.keys(data.dates).length} days of data`);
+    
+    // ── Track Multi-Activity Days ──────────────────────────────────────────
+    
+    // Get athlete profile ID for pattern tracking
+    const profile = await db('athlete_profiles').where('user_id', user.id).first();
+    if (profile) {
+      for (const date of Object.keys(data.dates)) {
+        const dateActivities = activitiesByDate[date] || [];
+        if (dateActivities.length >= 2) {
+          try {
+            // Fetch full activity details for tracking
+            const fullActivities = await db('activities')
+              .where('user_id', user.id)
+              .whereRaw('DATE(date) = ?', [date])
+              .select('*');
+            
+            await trackMultiActivityDay(profile.id, date, fullActivities);
+            logger.info(`Tracked multi-activity day: ${date} (${fullActivities.length} activities)`);
+          } catch (trackError) {
+            logger.warn(`Failed to track multi-activity day ${date}:`, trackError.message);
+          }
+        }
+      }
+    }
+    
+    // ── Record Sync Completion Timestamp ─────────────────────────────────────
+    // Write timestamp to avoid false "stale data" warnings immediately after sync
+    await db('users')
+      .where('id', user.id)
+      .update({ last_successful_sync: db.fn.now() });
+    logger.info('✓ Recorded sync completion timestamp');
     
     // Return only a summary instead of full raw data (avoids 1MB response issues)
     const summary = {

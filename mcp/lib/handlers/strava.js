@@ -118,14 +118,16 @@ export const stravaHandlers = {
       text += `🏷️ Types: ${types.join(', ')}\n\n`;
 
       for (const act of activities) {
-        const dist = act.distance_m ? (act.distance_m / 1000).toFixed(1) : '?';
-        const time = act.moving_time_sec ? `${Math.floor(act.moving_time_sec / 60)}min` : '?';
-        const elev = act.total_elevation_gain ? `${Math.round(act.total_elevation_gain)}m` : '';
-        const hr   = act.average_heartrate ? `❤️ ${act.average_heartrate}bpm` : '';
-        const date = act.start_date ? act.start_date.split('T')[0] : '?';
+        // Backend returns: distance (km), duration (sec), elevation_gain (m)
+        // Handle null/undefined values gracefully
+        const dist = act.distance != null ? `${Number(act.distance).toFixed(1)}km` : '0.0km';
+        const time = act.duration != null ? `${Math.floor(act.duration / 60)}min` : '0min';
+        const elev = act.elevation_gain != null ? `${Math.round(act.elevation_gain)}m` : '0m';
+        const hr   = act.avg_hr ? `❤️ ${act.avg_hr}bpm` : '';
+        const date = act.date ? act.date.split('T')[0] : 'N/A';
 
         text += `**${act.name}** (${act.sport_type || act.type})\n`;
-        text += `  📅 ${date} | 📏 ${dist}km | ⏱️ ${time} | ⬆️ ${elev} ${hr}\n\n`;
+        text += `  📅 ${date} | 📏 ${dist} | ⏱️ ${time} | ⬆️ ${elev} ${hr}\n\n`;
       }
 
       return { content: [{ type: 'text', text }] };

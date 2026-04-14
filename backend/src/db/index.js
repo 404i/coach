@@ -26,6 +26,19 @@ const db = knex({
   migrations: {
     directory: join(__dirname, 'migrations'),
     tableName: 'knex_migrations'
+  },
+  pool: {
+    afterCreate: (conn, done) => {
+      // Enable foreign key constraints for SQLite
+      conn.run('PRAGMA foreign_keys = ON', (err) => {
+        if (err) {
+          logger.error('Failed to enable foreign keys:', err);
+        } else {
+          logger.info('Foreign key constraints enabled');
+        }
+        done(err, conn);
+      });
+    }
   }
 });
 

@@ -1,0 +1,10 @@
+{
+  "garmin-ai-coach": {
+    "type": "sse",
+    "url": "http://localhost:3001/mcp",
+    "headers": {
+      "Authorization": "Bearer e7ff35eef1194dba2e0f1ed0d531dffa2e151ad4cfae919dd23a51940d464e2b"
+    },
+    "enabled": true
+  }
+}

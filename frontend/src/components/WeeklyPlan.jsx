@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getWeeklyPlan } from '../services/api';
 import { format, addDays, startOfWeek } from 'date-fns';
 
-const WeeklyPlan = ({ profileId = 'default' }) => {
+const WeeklyPlan = ({ email }) => {
   const [weeklyData, setWeeklyData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -19,7 +19,7 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
     setError(null);
     try {
       const weekStartStr = format(currentWeekStart, 'yyyy-MM-dd');
-      const data = await getWeeklyPlan(profileId, weekStartStr);
+      const data = await getWeeklyPlan(email, weekStartStr);
       setWeeklyData(data);
     } catch (err) {
       setError(err.message || 'Failed to load weekly plan');
@@ -36,26 +36,23 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
   const getIntensityColor = (intensity) => {
     const colors = {
       rest: 'bg-gray-100 text-gray-700',
-      easy_aerobic: 'bg-green-100 text-green-700',
-      moderate_aerobic: 'bg-blue-100 text-blue-700',
-      tempo: 'bg-orange-100 text-orange-700',
-      threshold: 'bg-red-100 text-red-700',
-      hiit: 'bg-purple-100 text-purple-700',
+      recovery: 'bg-gray-200 text-gray-700',
+      easy: 'bg-green-100 text-green-700',
+      moderate: 'bg-blue-100 text-blue-700',
+      hard: 'bg-red-100 text-red-700',
     };
     return colors[intensity] || 'bg-gray-100 text-gray-700';
   };
 
-  const getSportEmoji = (sport) => {
+  const getIntensityEmoji = (intensity) => {
     const emojis = {
-      run: '🏃',
-      bike: '🚴',
-      swim: '🏊',
-      walk: '🚶',
-      yoga: '🧘',
-      strength: '💪',
       rest: '😴',
+      recovery: '🧘',
+      easy: '🚶',
+      moderate: '🏃',
+      hard: '🔥',
     };
-    return emojis[sport] || '🏃';
+    return emojis[intensity] || '🏃';
   };
 
   if (loading) {
@@ -84,13 +81,15 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
     );
   }
 
-  if (!weeklyData?.plan) {
+  if (!weeklyData?.daily_workouts) {
     return (
       <div className="text-center py-8 text-gray-500">
         No weekly plan available
       </div>
     );
   }
+
+  const { current_state, weekly_targets, daily_workouts, data_warnings, coaching_notes } = weeklyData;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -109,11 +108,23 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
           <h2 className="text-2xl font-bold text-gray-800">
             Week of {format(currentWeekStart, 'MMM d, yyyy')}
           </h2>
-          {weeklyData.training_load_summary && (
+          {weekly_targets && (
             <div className="flex items-center justify-center gap-4 mt-2 text-sm text-gray-600">
-              <span>Weekly Load: <strong>{weeklyData.training_load_summary.total_volume_min}min</strong></span>
+              <span>Plan: <strong className="capitalize">{weeklyData.plan_type?.replace('_', ' ')}</strong></span>
               <span>•</span>
-              <span>Intensity Score: <strong>{weeklyData.training_load_summary.intensity_score}</strong></span>
+              <span>Hard: <strong>{weekly_targets.hard_days}d</strong></span>
+              <span>Mod: <strong>{weekly_targets.moderate_days}d</strong></span>
+              <span>Easy: <strong>{weekly_targets.easy_days}d</strong></span>
+              <span>Rest: <strong>{weekly_targets.rest_days}d</strong></span>
+            </div>
+          )}
+          {current_state && (
+            <div className="flex items-center justify-center gap-3 mt-1 text-xs text-gray-500">
+              <span>Readiness: <strong>{current_state.readiness_score}</strong></span>
+              <span>•</span>
+              <span>Capacity: <strong className="capitalize">{current_state.capacity?.replace('_', ' ')}</strong></span>
+              <span>•</span>
+              <span>Form: <strong className="capitalize">{current_state.fatigue_level}</strong></span>
             </div>
           )}
         </div>
@@ -128,23 +139,25 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
         </button>
       </div>
 
-      {/* Weekly Overview */}
-      {weeklyData.week_pattern && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">Weekly Strategy</h3>
-          <p className="text-blue-800 text-sm">{weeklyData.week_pattern}</p>
+      {/* Data Warnings */}
+      {data_warnings && data_warnings.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <h3 className="font-semibold text-amber-900 mb-1">⚠️ Data Warning</h3>
+          {data_warnings.map((warning, i) => (
+            <p key={i} className="text-amber-800 text-sm">{warning}</p>
+          ))}
         </div>
       )}
 
       {/* Days Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {Object.entries(weeklyData.plan).map(([day, workout]) => {
-          const dayDate = addDays(currentWeekStart, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].indexOf(day));
-          const isToday = format(dayDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+        {daily_workouts.map((workout) => {
+          const workoutDate = new Date(workout.date + 'T00:00:00');
+          const isToday = format(workoutDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
           return (
             <div
-              key={day}
+              key={workout.date}
               className={`bg-white rounded-lg border-2 p-5 transition-all ${
                 isToday ? 'border-blue-500 shadow-lg' : 'border-gray-200 hover:border-gray-300'
               }`}
@@ -152,54 +165,57 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
               {/* Day Header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="font-bold text-gray-800 capitalize">
-                    {day}
+                  <h3 className="font-bold text-gray-800">
+                    {workout.day_of_week}
                     {isToday && <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-1 rounded">Today</span>}
                   </h3>
-                  <p className="text-sm text-gray-500">{format(dayDate, 'MMM d')}</p>
+                  <p className="text-sm text-gray-500">{format(workoutDate, 'MMM d')}</p>
                 </div>
-                <span className="text-3xl">{getSportEmoji(workout.sport)}</span>
+                <span className="text-3xl">{getIntensityEmoji(workout.intensity)}</span>
               </div>
 
-              {/* Workout Details */}
+              {/* Intensity Badge */}
               <div className={`inline-block px-3 py-1 rounded-full text-xs font-medium mb-3 ${getIntensityColor(workout.intensity)}`}>
-                {workout.intensity.replace(/_/g, ' ').toUpperCase()}
+                {workout.description || workout.intensity.toUpperCase()}
               </div>
 
-              <h4 className="font-semibold text-gray-800 mb-2">{workout.title}</h4>
-              
+              {/* Duration & Load */}
               <div className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>{workout.duration_min} minutes</span>
-                </div>
+                {workout.duration_minutes > 0 && (
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{workout.duration_minutes} minutes</span>
+                  </div>
+                )}
 
-                {workout.target_zones && workout.target_zones.length > 0 && (
+                {workout.training_load > 0 && (
                   <div className="flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                     </svg>
-                    <span>{workout.target_zones.join(', ')}</span>
-                  </div>
-                )}
-
-                {workout.location && (
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="capitalize">{workout.location}</span>
+                    <span>Load: {workout.training_load}</span>
                   </div>
                 )}
               </div>
 
-              {/* Key Focus */}
-              {workout.key_focus && (
+              {/* Activity Options */}
+              {workout.activities && workout.activities.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-600 italic">{workout.key_focus}</p>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Options:</p>
+                  <ul className="text-xs text-gray-600 space-y-1">
+                    {workout.activities.slice(0, 3).map((activity, i) => (
+                      <li key={i}>• {activity}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Focus */}
+              {workout.focus && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs text-gray-600 italic">{workout.focus}</p>
                 </div>
               )}
             </div>
@@ -208,7 +224,7 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
       </div>
 
       {/* Coach Notes */}
-      {weeklyData.coach_notes && (
+      {coaching_notes && (
         <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-5">
           <h3 className="font-semibold text-yellow-900 mb-2 flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,7 +232,7 @@ const WeeklyPlan = ({ profileId = 'default' }) => {
             </svg>
             Coach's Notes
           </h3>
-          <p className="text-yellow-800 text-sm">{weeklyData.coach_notes}</p>
+          <p className="text-yellow-800 text-sm whitespace-pre-line">{coaching_notes}</p>
         </div>
       )}
     </div>

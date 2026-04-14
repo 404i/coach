@@ -10,104 +10,61 @@
  * 4. Database truth > Conversation memory ALWAYS
  */
 
-import sqlite3 from 'sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { subDays, format, differenceInDays } from 'date-fns';
 import logger from '../utils/logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Path to GarminDB activities database
-const garminActivityDbPath = process.env.GARMIN_ACTIVITIES_DB || 
-  join(__dirname, '../../../data/garmin/HealthData/DBs/garmin_activities.db');
-
-/**
- * Get a promisified connection to GarminDB
- */
-function getGarminDB() {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(garminActivityDbPath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) {
-        logger.error('Failed to open GarminDB:', err);
-        reject(err);
-      } else {
-        resolve(db);
-      }
-    });
-  });
-}
-
-/**
- * Promisify database operations
- */
-function dbAll(db, query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-}
-
-function dbGet(db, query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(query, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
-}
+import db from '../db/index.js';
+import { mapAppActivityToGarminSchema } from '../utils/activity-schema-mapper.js';
 
 /**
  * Get the most recent activity from database
  */
 export async function getMostRecentActivity(email) {
-  let db;
   try {
-    db = await getGarminDB();
+    // Get user ID - activities table uses user.id as profile_id, not athlete_profile.id
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) {
+      return {
+        exists: false,
+        message: "User not found",
+        warning: "⚠️  User not found in database"
+      };
+    }
     
-    const query = `
-      SELECT 
-        date(start_time) as date,
-        time(start_time) as time,
-        sport,
-        sub_sport,
-        name,
-        distance,
-        calories,
-        elapsed_time
-      FROM activities
-      ORDER BY start_time DESC
-      LIMIT 1
-    `;
-    
-    const activity = await dbGet(db, query);
+    const activity = await db('activities')
+      .where({ user_id: user.id })
+      .orderBy('start_time', 'desc')
+      .first();
     
     if (!activity) {
       return {
         exists: false,
         message: "No activities found in database",
-        warning: "⚠️  GarminDB may need re-authentication"
+        warning: "⚠️  Garmin sync may be needed"
       };
     }
+    
+    // Map to legacy schema for backward compatibility
+    const mapped = mapAppActivityToGarminSchema(activity);
     
     const activityDate = new Date(activity.date);
     const now = new Date();
     const daysSince = differenceInDays(now, activityDate);
     
+    // Format time from timestamp
+    const startTime = new Date(activity.start_time);
+    const timeStr = startTime.toTimeString().split(' ')[0]; // HH:MM:SS
+    
     return {
       exists: true,
       activity: {
         date: activity.date,
-        time: activity.time,
-        sport: activity.sport,
-        sub_sport: activity.sub_sport,
-        name: activity.name,
+        time: timeStr,
+        sport: mapped.sport,
+        sub_sport: mapped.sub_sport,
+        name: mapped.name,
         distance: activity.distance,
         calories: activity.calories,
-        elapsed_time: activity.elapsed_time
+        elapsed_time: activity.duration
       },
       days_since: daysSince,
       is_recent: daysSince <= 1,
@@ -119,12 +76,8 @@ export async function getMostRecentActivity(email) {
     return {
       exists: false,
       error: error.message,
-      warning: "⚠️  Could not access GarminDB activities"
+      warning: "⚠️  Could not access activities database"
     };
-  } finally {
-    if (db) {
-      db.close();
-    }
   }
 }
 
@@ -132,42 +85,55 @@ export async function getMostRecentActivity(email) {
  * Get recent activities within a date range
  */
 export async function getRecentActivities(email, days = 7) {
-  let db;
   try {
-    db = await getGarminDB();
+    // Get user ID - activities table uses user.id as profile_id
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) {
+      return {
+        activities: [],
+        count: 0,
+        error: 'User not found'
+      };
+    }
     
     const startDate = format(subDays(new Date(), days), 'yyyy-MM-dd');
     const endDate = format(new Date(), 'yyyy-MM-dd');
     
-    const query = `
-      SELECT 
-        date(start_time) as date,
-        time(start_time) as time,
-        sport,
-        sub_sport,
-        name,
-        distance,
-        calories,
-        elapsed_time
-      FROM activities
-      WHERE date(start_time) >= date(?)
-      ORDER BY start_time DESC
-    `;
+    const activities = await db('activities')
+      .where({ user_id: user.id })
+      .where('date', '>=', startDate)
+      .orderBy('start_time', 'desc');
     
-    const activities = await dbAll(db, query, [startDate]);
+    // Map activities to legacy schema and format
+    const mapped = activities.map(activity => {
+      const mappedActivity = mapAppActivityToGarminSchema(activity);
+      const startTime = new Date(activity.start_time);
+      const timeStr = startTime.toTimeString().split(' ')[0];
+      
+      return {
+        date: activity.date,
+        time: timeStr,
+        sport: mappedActivity.sport,
+        sub_sport: mappedActivity.sub_sport,
+        name: mappedActivity.name,
+        distance: activity.distance,
+        calories: activity.calories,
+        elapsed_time: activity.duration
+      };
+    });
     
     let latestDate = null;
     let daysSinceLast = null;
     
-    if (activities.length > 0) {
-      latestDate = activities[0].date;
+    if (mapped.length > 0) {
+      latestDate = mapped[0].date;
       const latestActivityDate = new Date(latestDate);
       daysSinceLast = differenceInDays(new Date(), latestActivityDate);
     }
     
     return {
-      activities: activities,
-      count: activities.length,
+      activities: mapped,
+      count: mapped.length,
       date_range: {
         start: startDate,
         end: endDate,
@@ -187,10 +153,6 @@ export async function getRecentActivities(email, days = 7) {
       count: 0,
       error: error.message
     };
-  } finally {
-    if (db) {
-      db.close();
-    }
   }
 }
 
@@ -198,37 +160,47 @@ export async function getRecentActivities(email, days = 7) {
  * Verify if a specific activity type exists in date range
  */
 export async function verifyActivityExists(email, activityType, dateRange) {
-  let db;
   try {
-    db = await getGarminDB();
-    
-    const query = `
-      SELECT 
-        date(start_time) as date,
-        sport,
-        sub_sport,
-        name,
-        distance,
-        calories
-      FROM activities
-      WHERE date(start_time) BETWEEN date(?) AND date(?)
-        AND (sport LIKE ? OR sub_sport LIKE ? OR name LIKE ?)
-      ORDER BY start_time DESC
-    `;
+    // Get user ID - activities table uses user.id as profile_id
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) {
+      return {
+        exists: false,
+        error: 'User not found',
+        activities: [],
+        count: 0
+      };
+    }
     
     const searchPattern = `%${activityType}%`;
-    const activities = await dbAll(db, query, [
-      dateRange.start,
-      dateRange.end,
-      searchPattern,
-      searchPattern,
-      searchPattern
-    ]);
+    
+    const activities = await db('activities')
+      .where({ user_id: user.id })
+      .whereBetween('date', [dateRange.start, dateRange.end])
+      .where(function() {
+        this.where('sport_type', 'like', searchPattern)
+          .orWhere('activity_type', 'like', searchPattern)
+          .orWhere('activity_name', 'like', searchPattern);
+      })
+      .orderBy('start_time', 'desc');
+    
+    // Map to legacy schema
+    const mapped = activities.map(activity => {
+      const mappedActivity = mapAppActivityToGarminSchema(activity);
+      return {
+        date: activity.date,
+        sport: mappedActivity.sport,
+        sub_sport: mappedActivity.sub_sport,
+        name: mappedActivity.name,
+        distance: activity.distance,
+        calories: activity.calories
+      };
+    });
     
     return {
-      exists: activities.length > 0,
-      activities: activities,
-      count: activities.length,
+      exists: mapped.length > 0,
+      activities: mapped,
+      count: mapped.length,
       date_range: dateRange,
       verified_at: new Date().toISOString()
     };
@@ -240,10 +212,6 @@ export async function verifyActivityExists(email, activityType, dateRange) {
       activities: [],
       count: 0
     };
-  } finally {
-    if (db) {
-      db.close();
-    }
   }
 }
 

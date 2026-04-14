@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "garmin-ai-coach": {
+      "type": "local",
+      "command": [
+        "node",
+        "/Users/tsochkata/git/coach/mcp/coach-mcp-server.js"
+      ],
+      "enabled": true
+    }
+  }
+}

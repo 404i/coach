@@ -5,6 +5,7 @@ import WeeklyPlan from './components/WeeklyPlan';
 import Statistics from './components/Statistics';
 import Onboarding from './components/Onboarding';
 import ErrorBoundary from './components/ErrorBoundary';
+import Goals from './components/Goals/Goals';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('daily');
@@ -79,6 +80,16 @@ function AppContent() {
                 >
                   Statistics
                 </button>
+                <button
+                  onClick={() => setCurrentView('goals')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    currentView === 'goals'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  Goals
+                </button>
               </div>
 
               {/* Profile Menu */}
@@ -97,8 +108,9 @@ function AppContent() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <ErrorBoundary>
           {currentView === 'daily' && <Dashboard profileId={profile.profile_id} />}
-          {currentView === 'weekly' && <WeeklyPlan profileId={profile.profile_id} />}
+          {currentView === 'weekly' && <WeeklyPlan email={profile.email} />}
           {currentView === 'stats' && <Statistics profileId={profile.profile_id} email={profile.email} />}
+          {currentView === 'goals' && <Goals email={profile.email} />}
         </ErrorBoundary>
       </main>
     </div>

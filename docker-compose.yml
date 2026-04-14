@@ -12,7 +12,11 @@ services:
       - ./logs:/app/logs
     environment:
       - NODE_ENV=${NODE_ENV:-production}
+      - LLM_PROVIDER=${LLM_PROVIDER:-lmstudio}
       - LM_STUDIO_URL=${LM_STUDIO_URL:-http://host.docker.internal:1234/v1}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_URL=${OPENAI_API_URL:-https://api.openai.com/v1}
       - LLM_TIMEOUT_MS=${LLM_TIMEOUT_MS:-5000}
       - ENABLE_RULE_BASED_FALLBACK=${ENABLE_RULE_BASED_FALLBACK:-true}
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}

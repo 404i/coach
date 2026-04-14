@@ -1,0 +1,67 @@
+Evaluate an athlete's weekly progress toward a specific training goal and provide coaching guidance.
+
+GOAL:
+{{GOAL}}
+
+CURRENT BLOCK (if applicable):
+{{CURRENT_BLOCK}}
+
+WEEKLY KPIs FOR THIS GOAL:
+{{WEEKLY_KPIS}}
+
+WEEK START: {{WEEK_START}}
+WEEKS REMAINING TO TARGET: {{WEEKS_REMAINING}}
+
+COMPLETED SESSIONS THIS WEEK:
+{{COMPLETED_SESSIONS}}
+
+DISRUPTIONS / MISSED SESSIONS:
+{{DISRUPTIONS}}
+
+RECOVERY SIGNALS THIS WEEK:
+{{RECOVERY_SIGNALS}}
+
+INSTRUCTIONS:
+1. Assess whether the athlete is on_track, at_risk, or off_track for this specific goal:
+   - on_track: KPIs met or clearly achievable with remaining week days; trajectory positive.
+   - at_risk: some KPIs missed but goal still reachable with effort; risk of falling behind.
+   - off_track: significant disruption, multiple KPIs missed, trajectory needs intervention.
+2. Quantify progress: compare actual metric_value (observed or estimated) to the expected value at this point.
+3. Explain why in plain language — reference specific sessions, recovery data, or patterns.
+4. If off_track or at_risk: propose a minimum-effective alternative — the smallest set of sessions
+   that would preserve progress without overloading the athlete. This should be realistic and kind,
+   not punishing. The rest of the plan must remain intact.
+5. Write a plain-language coaching summary (2-4 sentences, second person, encouraging but honest).
+
+IMPORTANT RULES:
+- Do NOT invent metric values — use null if data is unavailable.
+- If off_track due to illness or injury, the min_effective_alt should be REST or very gentle movement.
+- Never prescribe sessions that violate injury contraindications.
+- tone: supportive coach, not drill sergeant.
+
+OUTPUT REQUIREMENTS:
+Return ONLY valid JSON — no preamble, no explanation:
+
+{
+  "status": "on_track|at_risk|off_track",
+  "why": "Concise factual reason for the status (1-2 sentences referencing actual data).",
+  "metric_value": null,
+  "metric_delta": null,
+  "kpis_snapshot": [
+    { "kpi": "3 endurance sessions/week", "achieved": true, "value": "3" }
+  ],
+  "min_effective_alt": null,
+  "plain_language_summary": "2-4 sentence coaching note addressed directly to the athlete."
+}
+
+When min_effective_alt is needed (at_risk or off_track), use this structure:
+{
+  "min_effective_alt": {
+    "title": "Revised minimum target",
+    "description": "Why this is the right adjustment",
+    "sessions": [
+      "1× 30-min easy aerobic ride — any day remaining this week",
+      "1× 15-min core circuit — can be done at home"
+    ]
+  }
+}

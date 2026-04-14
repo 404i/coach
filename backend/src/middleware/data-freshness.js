@@ -13,30 +13,48 @@ import { differenceInHours, format } from 'date-fns';
 import logger from '../utils/logger.js';
 
 /**
- * Get the latest data date for a given email
+ * Get the latest data date and sync timestamp for a given email
  */
 async function getLatestDataDate(email) {
   try {
-    // Get user and profile
     const user = await db('users').where('garmin_email', email).first();
     if (!user) {
-      return null;
+      return { date: null, syncTimestamp: null };
     }
 
-    const profile = await db('athlete_profiles').where('user_id', user.id).first();
-    if (!profile) {
-      return null;
-    }
-
-    // Get latest metrics date
+    // Get latest metrics date (daily_metrics uses user_id, not profile_id)
     const latest = await db('daily_metrics')
-      .where('profile_id', profile.id)
+      .where('user_id', user.id)
+      .orderBy('date', 'desc')
+      .first();
+
+    return { 
+      date: latest ? latest.date : null,
+      syncTimestamp: user.last_successful_sync || null
+    };
+  } catch (error) {
+    logger.error('Error getting latest data date:', error);
+    return { date: null, syncTimestamp: null };
+  }
+}
+
+/**
+ * Get the latest activity date for a given email
+ */
+async function getLatestActivityDate(email) {
+  try {
+    const user = await db('users').where('garmin_email', email).first();
+    if (!user) return null;
+
+    // Get latest activity date (activities uses user_id, not profile_id)
+    const latest = await db('activities')
+      .where('user_id', user.id)
       .orderBy('date', 'desc')
       .first();
 
     return latest ? latest.date : null;
   } catch (error) {
-    logger.error('Error getting latest data date:', error);
+    logger.error('Error getting latest activity date:', error);
     return null;
   }
 }
@@ -44,10 +62,38 @@ async function getLatestDataDate(email) {
 /**
  * Create data context object
  */
-export function createDataContext(dataDate, systemDate = null) {
+export function createDataContext(dataDate, activityDate = null, systemDate = null, syncTimestamp = null) {
   const now = new Date();
   const currentDate = systemDate ? new Date(systemDate) : now;
   const currentDateStr = format(currentDate, 'yyyy-MM-dd');
+  
+  // ── Check Recent Sync First ─────────────────────────────────────────────
+  // If sync completed within last 5 minutes, data is fresh (avoids race condition)
+  if (syncTimestamp) {
+    const syncDate = new Date(syncTimestamp);
+    const syncAgeMinutes = differenceInHours(now, syncDate) * 60;
+    
+    if (syncAgeMinutes < 5) {
+      // Recent sync completed - trust it's fresh even if data timestamps lag
+      return {
+        data_date: dataDate,
+        activity_date: activityDate,
+        system_date: currentDateStr,
+        data_age_hours: dataDate ? differenceInHours(now, new Date(dataDate)) : null,
+        activity_age_hours: activityDate ? differenceInHours(now, new Date(activityDate)) : null,
+        is_current: true,
+        activity_data_stale: false,
+        needs_sync: false,
+        last_sync: format(syncDate, 'yyyy-MM-dd HH:mm:ss'),
+        sync_age_minutes: Math.floor(syncAgeMinutes),
+        timezone: process.env.TZ || 'UTC',
+        warning: null,
+        activity_warning: null
+      };
+    }
+  }
+  
+  // ── Fall Back to Data Age Calculation ───────────────────────────────────
   
   if (!dataDate) {
     return {
@@ -76,14 +122,32 @@ export function createDataContext(dataDate, systemDate = null) {
     needs_sync = true;
   }
   
+  // Activity data freshness
+  let activityWarning = null;
+  let activityAgeHours = null;
+  let activityDataStale = true;
+  if (activityDate) {
+    activityAgeHours = differenceInHours(now, new Date(activityDate));
+    activityDataStale = activityAgeHours >= 48;
+    if (activityDataStale) {
+      activityWarning = `⚠️  Activity data is ${Math.floor(activityAgeHours / 24)} days old — training load calculations may be unreliable`;
+    }
+  } else {
+    activityWarning = '⚠️  No activity data available — training load calculations will use defaults';
+  }
+
   return {
     data_date: dataDate,
+    activity_date: activityDate,
     system_date: currentDateStr,
     data_age_hours: ageHours,
+    activity_age_hours: activityAgeHours,
     is_current: ageHours < 2,
+    activity_data_stale: activityDataStale,
     needs_sync,
     timezone: process.env.TZ || 'UTC',
-    warning: warning
+    warning,
+    activity_warning: activityWarning
   };
 }
 
@@ -100,8 +164,16 @@ export async function addDataContext(req, res, next) {
       return next();
     }
     
-    const latestDate = await getLatestDataDate(email);
-    const context = createDataContext(latestDate);
+    const [latestData, latestActivityDate] = await Promise.all([
+      getLatestDataDate(email),
+      getLatestActivityDate(email)
+    ]);
+    const context = createDataContext(
+      latestData.date, 
+      latestActivityDate, 
+      null, 
+      latestData.syncTimestamp
+    );
     
     // Attach to request for use in route handlers
     req.dataContext = context;
@@ -128,8 +200,16 @@ export async function addDataContext(req, res, next) {
  */
 export async function addDataContextToResponse(email, responseData) {
   try {
-    const latestDate = await getLatestDataDate(email);
-    const context = createDataContext(latestDate);
+    const [latestData, latestActivityDate] = await Promise.all([
+      getLatestDataDate(email),
+      getLatestActivityDate(email)
+    ]);
+    const context = createDataContext(
+      latestData.date, 
+      latestActivityDate, 
+      null, 
+      latestData.syncTimestamp
+    );
     
     return {
       data_context: context,

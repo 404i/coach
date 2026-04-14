@@ -34,6 +34,7 @@ import { stravaHandlers }        from './lib/handlers/strava.js';
 import { planningHandlers }      from './lib/handlers/planning.js';
 import { analyticsHandlers }     from './lib/handlers/analytics.js';
 import { weatherAlertsHandlers } from './lib/handlers/weather-alerts.js';
+import { goalsHandlers }         from './lib/handlers/goals.js';
 
 // ── HTTP server (lazy-loaded only in HTTP mode) ─────────────────────────────
 import { startHttpServer } from './lib/http-server.js';
@@ -72,6 +73,7 @@ const allHandlers = {
   ...planningHandlers,
   ...analyticsHandlers,
   ...weatherAlertsHandlers,
+  ...goalsHandlers,
 };
 
 // ── MCP Server factory ──────────────────────────────────────────────────────

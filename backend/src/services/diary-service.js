@@ -5,7 +5,8 @@
 import db from '../db/index.js';
 import axios from 'axios';
 import logger from '../utils/logger.js';
-import { getProfileIdFromEmail } from '../services/stats-service.js';
+import { getProfileIdFromEmail, getUserIdFromEmail } from '../services/stats-service.js';
+import { generateWeeklyGoalReview } from './goal-service.js';
 
 /**
  * Simple LLM call helper
@@ -167,6 +168,7 @@ export async function getDiaryEntry(email, date) {
 export async function analyzeDiaryPatterns(email, days = 60) {
   try {
     const profileId = await getProfileIdFromEmail(email);
+    const userId = await getUserIdFromEmail(email);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
     // Get diary entries
@@ -177,7 +179,7 @@ export async function analyzeDiaryPatterns(email, days = 60) {
     
     // Get corresponding daily metrics
     const metrics = await db('daily_metrics')
-      .where({ profile_id: profileId })
+      .where({ user_id: userId })
       .where('date', '>=', startDate)
       .orderBy('date', 'desc');
     
@@ -386,13 +388,22 @@ export async function getWeeklySummary(email, weekStart) {
     
     // Generate new summary (don't save to DB for now since table structure is different)
     const summary = await generateWeeklySummary(email, weekStart, weekEnd);
-    
+
+    // Fetch per-goal progress for the week
+    let goals = [];
+    try {
+      goals = await generateWeeklyGoalReview(profileId, weekStart);
+    } catch (goalErr) {
+      logger.warn('Could not fetch goal review for weekly summary:', goalErr.message);
+    }
+
     return { 
       ...summary, 
       profile_id: profileId, 
       week_start: weekStart, 
       week_end: weekEnd,
-      generated_at: new Date().toISOString()
+      generated_at: new Date().toISOString(),
+      goals
     };
   } catch (error) {
     logger.error('Error getting weekly summary:', error);
@@ -405,10 +416,11 @@ export async function getWeeklySummary(email, weekStart) {
  */
 async function generateWeeklySummary(email, weekStart, weekEnd) {
   const profileId = await getProfileIdFromEmail(email);
+  const userId = await getUserIdFromEmail(email);
   
   // Get week's metrics
   const metrics = await db('daily_metrics')
-    .where({ profile_id: profileId })
+    .where({ user_id: userId })
     .whereBetween('date', [weekStart, weekEnd])
     .orderBy('date');
   
@@ -429,7 +441,9 @@ async function generateWeeklySummary(email, weekStart, weekEnd) {
   metrics.forEach(m => {
     const data = typeof m.metrics_data === 'string' ? JSON.parse(m.metrics_data) : m.metrics_data;
     totalLoad += data.training_load || 0;
-    totalHours += (data.total_duration_seconds || 0) / 3600;
+    // Try multiple field names for duration (seconds)
+    const durationSeconds = data.total_duration_seconds || data.duration || data.total_duration || 0;
+    totalHours += durationSeconds / 3600;
     if (data.hrv) {
       avgHrv += data.hrv;
       hrvCount++;
@@ -439,6 +453,16 @@ async function generateWeeklySummary(email, weekStart, weekEnd) {
       recoveryCount++;
     }
   });
+  
+  // If metrics don't have duration, query activities directly
+  if (totalHours === 0 && totalLoad > 0) {
+    const activities = await db('activities')
+      .where({ user_id: userId })
+      .whereBetween('date', [weekStart, weekEnd]);
+    
+    totalHours = activities.reduce((sum, a) => sum + (a.duration || 0), 0) / 3600;
+    logger.info(`Weekly summary: Retrieved duration from activities (${totalHours.toFixed(1)}h)`);
+  }
   
   avgHrv = hrvCount > 0 ? Math.round(avgHrv / hrvCount) : null;
   avgRecovery = recoveryCount > 0 ? Math.round(avgRecovery / recoveryCount) : null;

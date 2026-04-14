@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import db from '../db/index.js';
 import {
   getTrainingLoadTrend,
   getRecoveryTrend,
@@ -24,6 +25,9 @@ export async function generateWeeklyPlan(email, startDate = null) {
       ? new Date(startDate)
       : new Date(Date.now() + 24 * 60 * 60 * 1000);
     
+    // Load athlete profile for availability constraints
+    const athleteProfile = await loadAthleteProfile(email);
+    
     // Fetch current stats
     const [loadTrend, recoveryTrend, hrvBaseline, tsb] = await Promise.all([
       getTrainingLoadTrend(email, 60),
@@ -32,12 +36,16 @@ export async function generateWeeklyPlan(email, startDate = null) {
       getTrainingStressBalance(email, 60)
     ]);
 
+    // Detect if load data is stale (activities not syncing)
+    const loadDataStale = loadTrend.current.load_data_stale === true;
+
     // Analyze current state
     const currentState = analyzeTrainingState({
       loadTrend,
       recoveryTrend,
       hrvBaseline,
-      tsb
+      tsb,
+      loadDataStale
     });
 
     // Determine if a recovery week is needed
@@ -51,7 +59,8 @@ export async function generateWeeklyPlan(email, startDate = null) {
       loadTrend,
       recoveryTrend,
       hrvBaseline,
-      tsb
+      tsb,
+      athleteProfile
     });
 
     return {
@@ -61,6 +70,9 @@ export async function generateWeeklyPlan(email, startDate = null) {
       current_state: currentState,
       weekly_targets: calculateWeeklyTargets(currentState, needsRecoveryWeek, loadTrend),
       daily_workouts: dailyWorkouts,
+      data_warnings: loadDataStale
+        ? ['Activity data is stale — plan is based on recovery metrics only. Training load distribution may not reflect actual fitness. Sync Garmin activities to get accurate plans.']
+        : [],
       coaching_notes: generateCoachingNotes(currentState, needsRecoveryWeek, dailyWorkouts)
     };
   } catch (error) {
@@ -72,7 +84,7 @@ export async function generateWeeklyPlan(email, startDate = null) {
 /**
  * Analyze current training state to inform planning decisions
  */
-function analyzeTrainingState({ loadTrend, recoveryTrend, hrvBaseline, tsb }) {
+function analyzeTrainingState({ loadTrend, recoveryTrend, hrvBaseline, tsb, loadDataStale = false }) {
   const acr = loadTrend.current.acute_chronic_ratio;
   const recovery = recoveryTrend.current.recovery_score;
   const hrvStatus = hrvBaseline.current.status;
@@ -81,31 +93,36 @@ function analyzeTrainingState({ loadTrend, recoveryTrend, hrvBaseline, tsb }) {
 
   // Determine overall readiness (0-100)
   let readiness = 0;
-  
-  // Recovery contributes 35%
-  readiness += (recovery || 0) * 0.35;
-  
-  // ACR contributes 25% (optimal zone = 0.8-1.25)
-  let acrScore = 50;
-  if (acr >= 0.8 && acr <= 1.25) acrScore = 100;
-  else if (acr > 1.25 && acr <= 1.5) acrScore = 70;
-  else if (acr > 1.5) acrScore = 40;
-  else if (acr < 0.8) acrScore = 60;
-  readiness += acrScore * 0.25;
-  
-  // HRV contributes 20%
-  const hrvScoreMap = { very_high: 100, high: 85, normal: 70, low: 50, very_low: 30 };
-  readiness += (hrvScoreMap[hrvStatus] || 50) * 0.20;
-  
-  // TSB contributes 20%
-  const tsbScoreMap = { rested: 90, fresh: 100, fatigued: 60, overreached: 30 };
-  readiness += (tsbScoreMap[tsbForm] || 50) * 0.20;
 
-  // Determine training capacity
+  const hrvScoreMap = { very_high: 100, high: 85, normal: 70, low: 50, very_low: 30 };
+  const tsbScoreMap = { rested: 90, fresh: 100, fatigued: 60, overreached: 30 };
+
+  if (loadDataStale) {
+    // Activity data is stale — skip ACR, redistribute its 25% weight
+    // Recovery 47% (was 35%), HRV 27% (was 20%), TSB 26% (was 20%)
+    readiness += (recovery || 0) * 0.47;
+    readiness += (hrvScoreMap[hrvStatus] || 50) * 0.27;
+    readiness += (tsbScoreMap[tsbForm] || 50) * 0.26;
+  } else {
+    // Normal calculation with ACR
+    readiness += (recovery || 0) * 0.35;
+
+    let acrScore = 50;
+    if (acr >= 0.8 && acr <= 1.25) acrScore = 100;
+    else if (acr > 1.25 && acr <= 1.5) acrScore = 70;
+    else if (acr > 1.5) acrScore = 40;
+    else if (acr < 0.8) acrScore = 60;
+    readiness += acrScore * 0.25;
+
+    readiness += (hrvScoreMap[hrvStatus] || 50) * 0.20;
+    readiness += (tsbScoreMap[tsbForm] || 50) * 0.20;
+  }
+
+  // Determine training capacity — exclude ACR check when data is stale
   let capacity = 'high';
-  if (readiness < 40 || acr > 1.5 || tsbForm === 'overreached') {
+  if (readiness < 40 || (!loadDataStale && acr > 1.5) || tsbForm === 'overreached') {
     capacity = 'very_low';
-  } else if (readiness < 55 || acr > 1.3 || recovery < 50) {
+  } else if (readiness < 55 || (!loadDataStale && acr > 1.3) || recovery < 50) {
     capacity = 'low';
   } else if (readiness < 70) {
     capacity = 'moderate';
@@ -114,6 +131,7 @@ function analyzeTrainingState({ loadTrend, recoveryTrend, hrvBaseline, tsb }) {
   return {
     readiness_score: Math.round(readiness),
     capacity,
+    load_data_stale: loadDataStale,
     recovery_status: recovery >= 70 ? 'good' : recovery >= 50 ? 'fair' : 'poor',
     load_status: loadTrend.current.status,
     fatigue_level: tsbForm,
@@ -216,7 +234,7 @@ function calculateWeeklyTargets(currentState, isRecoveryWeek, loadTrend) {
 /**
  * Generate daily workouts for the week
  */
-function generateDailyWorkouts({ startDate, currentState, needsRecoveryWeek, loadTrend, recoveryTrend, hrvBaseline, tsb }) {
+function generateDailyWorkouts({ startDate, currentState, needsRecoveryWeek, loadTrend, recoveryTrend, hrvBaseline, tsb, athleteProfile }) {
   const chronicLoad = loadTrend.current.chronic_load || 250;
   const dailyWorkouts = [];
   
@@ -243,7 +261,7 @@ function generateDailyWorkouts({ startDate, currentState, needsRecoveryWeek, loa
   for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
     const date = new Date(startDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
     const intensity = intensityPattern[dayOffset];
-    const workout = generateDailyWorkout(date, intensity, chronicLoad, currentState, weeklyTargets);
+    const workout = generateDailyWorkout(date, intensity, chronicLoad, currentState, weeklyTargets, athleteProfile);
     dailyWorkouts.push(workout);
   }
   
@@ -253,7 +271,7 @@ function generateDailyWorkouts({ startDate, currentState, needsRecoveryWeek, loa
 /**
  * Generate a single day's workout
  */
-function generateDailyWorkout(date, intensity, chronicLoad, currentState, weeklyTargets) {
+function generateDailyWorkout(date, intensity, chronicLoad, currentState, weeklyTargets, athleteProfile) {
   const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
   
   if (intensity === 'rest') {
@@ -299,7 +317,14 @@ function generateDailyWorkout(date, intensity, chronicLoad, currentState, weekly
   // Apply weekly target multiplier
   const weeklyLoadFactor = 1 + (weeklyTargets.load_increase / 100);
   const targetLoad = Math.round(chronicLoad * loadMultiplier * weeklyLoadFactor);
-  const duration = Math.round(240 * durationMultiplier); // Base 240 min for chronic load
+  
+  // Calculate realistic duration based on athlete constraints
+  const duration = calculateRealisticDuration({
+    dayOfWeek,
+    intensity,
+    durationMultiplier,
+    athleteProfile
+  });
   
   // Generate activity options
   const activities = generateActivityOptions(intensity, duration);
@@ -518,4 +543,123 @@ function generateCoachingNotes(currentState, isRecoveryWeek, dailyWorkouts) {
   notes.push('💤 **Remember**: Quality sleep and nutrition are as important as the workouts themselves.');
   
   return notes;
+}
+
+/**
+ * Load athlete profile with availability constraints
+ */
+async function loadAthleteProfile(email) {
+  try {
+    // Find user by email
+    const user = await db('users').where({ garmin_email: email }).first();
+    if (!user) {
+      logger.warn(`No user found for email: ${email}, using defaults`);
+      return getDefaultAthleteProfile();
+    }
+    
+    // Find athlete profile
+    const profile = await db('athlete_profiles').where({ user_id: user.id }).first();
+    if (!profile) {
+      logger.warn(`No athlete profile for user ${user.id}, using defaults`);
+      return getDefaultAthleteProfile();
+    }
+    
+    // Parse JSON fields
+    const profileData = profile.profile_data ? JSON.parse(profile.profile_data) : {};
+    const preferences = profile.preferences ? JSON.parse(profile.preferences) : {};
+    
+    return {
+      days_per_week: profile.days_per_week || profileData.access?.days_per_week || 3,
+      minutes_per_session: profile.minutes_per_session || profileData.access?.minutes_per_session || 45,
+      max_hard_days_per_week: preferences.max_hard_days_per_week || 2,
+      preferred_training_time: preferences.preferred_training_time || 'either',
+      favorite_sports: profile.favorite_sports ? JSON.parse(profile.favorite_sports) : [],
+      constraints: profile.constraints ? JSON.parse(profile.constraints) : [],
+      preferences: preferences
+    };
+  } catch (error) {
+    logger.error('Error loading athlete profile:', error);
+    return getDefaultAthleteProfile();
+  }
+}
+
+/**
+ * Get default athlete profile when none exists
+ */
+function getDefaultAthleteProfile() {
+  return {
+    days_per_week: 3,
+    minutes_per_session: 45,
+    max_hard_days_per_week: 2,
+    preferred_training_time: 'either',
+    favorite_sports: [],
+    constraints: [],
+    preferences: {}
+  };
+}
+
+/**
+ * Calculate realistic workout duration based on athlete constraints
+ * Applies: weekday-specific windows, sport caps, session time limits
+ */
+function calculateRealisticDuration({ dayOfWeek, intensity, durationMultiplier, athleteProfile }) {
+  // Start with athlete's typical session time
+  let baseDuration = athleteProfile.minutes_per_session || 45;
+  
+  // Weekday-specific adjustments (from athlete coaching preferences)
+  const weekdayWindows = {
+    'Monday': { min: 90, max: 180 },
+    'Wednesday': { min: 90, max: 180 },
+    'Friday': { min: 90, max: 180 },
+    'Tuesday': { min: 60, max: 90 },
+    'Thursday': { min: 60, max: 90 },
+    'Saturday': { min: 0, max: 0 },   // Opportunistic - no auto-schedule
+    'Sunday': { min: 0, max: 0 }      // Opportunistic - no auto-schedule
+  };
+  
+  const window = weekdayWindows[dayOfWeek];
+  
+  // Weekend handling: if opportunistic (min=0), use minimal duration for planning purposes
+  if (window && window.max === 0) {
+    // Weekends are opportunistic - prescribe minimal duration, athlete decides
+    baseDuration = Math.min(30, baseDuration);
+  } else if (window) {
+    // Weekday: use window midpoint as base, scaled by profile
+    const windowMid = (window.min + window.max) / 2;
+    baseDuration = windowMid;
+  }
+  
+  // Apply intensity multiplier
+  let targetDuration = Math.round(baseDuration * durationMultiplier);
+  
+  // Sport-specific caps (safety limits)
+  const sportCaps = {
+    swimming: 90,
+    strength: 60,
+    cycling: 180,
+    running: 120,
+    walk: 60,
+    yoga: 75,
+    hiit: 45
+  };
+  
+  // Apply sport cap if applicable (use most conservative)
+  const maxSportDuration = Math.min(...Object.values(sportCaps));
+  targetDuration = Math.min(targetDuration, maxSportDuration);
+  
+  // Apply weekday window constraint
+  if (window && window.max > 0) {
+    targetDuration = Math.max(window.min, Math.min(targetDuration, window.max));
+  }
+  
+  // Absolute safety bounds
+  targetDuration = Math.max(15, Math.min(targetDuration, 180));
+  
+  // Log if duration was significantly capped
+  const uncappedDuration = baseDuration * durationMultiplier;
+  if (Math.abs(uncappedDuration - targetDuration) > 30) {
+    logger.info(`Duration capped for ${dayOfWeek} ${intensity}: ${Math.round(uncappedDuration)}min → ${targetDuration}min`);
+  }
+  
+  return targetDuration;
 }

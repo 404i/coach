@@ -157,7 +157,7 @@ export const TOOLS = [
   // ── Planning / Workouts ──────────────────────────────────────────────────
   {
     name: "get_today_workout",
-    description: "Generate today's workout recommendation based on the athlete's profile, recent training, and recovery status. Returns 4 workout options at different intensities.",
+    description: "Generate today's workout recommendation with 4 intensity options (optimal, moderate, easy, recovery). Uses AI analysis of athlete profile, recovery metrics (HRV, RHR, sleep), training load, recent history, and constraints. Returns structured workout plans with sport, duration, intensity, and rationale for each option. Includes recovery assessment to guide training decisions.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,7 +169,7 @@ export const TOOLS = [
   },
   {
     name: "get_weekly_plan",
-    description: "Get the 7-day workout plan for the current week. Shows the complete training schedule with workout details for each day.",
+    description: "Generate a complete 7-day training plan with daily workout prescriptions. Uses AI analysis of athlete profile, 4-week training history, recovery trends, compliance patterns, and upcoming commitments. Returns structured plan with daily workouts (sport, duration, intensity, focus), rest day distribution, volume progression, and coaching rationale. Respects athlete constraints like weekday availability and weekend preferences.",
     inputSchema: {
       type: "object",
       properties: {
@@ -645,6 +645,71 @@ export const TOOLS = [
       type: "object",
       properties: {
         email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+      },
+      required: [],
+    },
+  },
+
+  // ── Smart Goals ──────────────────────────────────────────────────────────
+  {
+    name: "get_active_goals",
+    description: "Get all active smart training goals for the athlete with hierarchy (long-term → block sub-goals) and latest weekly progress status (on_track / at_risk / off_track). Use this at the start of coaching conversations or when the athlete asks about their goals.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        include_draft: { type: "boolean", description: "Also return draft block sub-goals pending review (default: false)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "create_goal",
+    description: "Parse a free-text training goal into a structured smart goal and save it. The system will interpret the intent, extract a target metric, generate weekly KPIs, and automatically create progressive block sub-goals in the background. Use preview_only=true to show the athlete the interpretation before saving.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        text: { type: "string", description: "Free-text goal from the athlete (e.g., 'Build MTB endurance for summer, avoid overreaching, add 2 core sessions/week')" },
+        preview_only: { type: "boolean", description: "If true, returns parsed preview without saving. Default: false (saves immediately)." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "adapt_goals",
+    description: "When training sessions have been missed or disrupted, propose a minimum-effective-dose alternative that preserves goal progress without overloading the athlete. The rest of the plan is NOT changed — this is a targeted goal-specific adjustment only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        goal_id: { type: "number", description: "ID of the goal to adapt (from get_active_goals)" },
+        disruptions: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of disruptions e.g. ['missed Tuesday tempo', 'travel Thursday-Friday', 'illness Monday']"
+        },
+        remaining_days: {
+          type: "array",
+          items: { type: "string" },
+          description: "Days still available this week e.g. ['Saturday', 'Sunday']"
+        },
+        recovery_signals: {
+          type: "object",
+          description: "Optional current recovery context { hrv, resting_hr, sleep_hours, fatigue_0_10 }"
+        },
+      },
+      required: ["goal_id", "disruptions"],
+    },
+  },
+  {
+    name: "get_weekly_goal_review",
+    description: "Get a per-goal weekly progress review showing on_track / at_risk / off_track status for each active goal, KPI snapshot, plain-language coaching note, and (if needed) a proposed minimum-effective alternative. Call this during weekly check-ins.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        email: { type: "string", description: "Athlete's email (optional if current athlete is set)" },
+        week_start: { type: "string", description: "Monday of the week (YYYY-MM-DD). Defaults to current week." },
       },
       required: [],
     },

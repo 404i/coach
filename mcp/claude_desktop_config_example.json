@@ -9,7 +9,7 @@
       "command": "node",
       "args": ["/path/to/coach/mcp/coach-mcp-server.js"],
       "env": {
-        "COACH_API_URL": "http://localhost:8080"
+        "COACH_API_URL": "http://localhost:8088"
       }
     },
 

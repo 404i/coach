@@ -1,0 +1,151 @@
+{
+  "$id": "smart_goal.v1",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SmartGoal",
+  "description": "A structured, context-aware training goal derived from free-text input.",
+  "type": "object",
+  "required": ["id", "profile_id", "title", "goal_type", "hierarchy_level", "status"],
+  "properties": {
+    "id": { "type": "integer" },
+    "profile_id": { "type": "integer" },
+    "raw_text": { "type": "string", "description": "Original free-text input from the athlete." },
+    "title": { "type": "string", "maxLength": 120 },
+    "goal_type": {
+      "type": "string",
+      "enum": ["performance", "consistency", "health", "skill", "event"],
+      "description": "performance=measurable output target; consistency=habit/regularity; health=wellbeing/body composition; skill=technique/capability; event=race/specific event."
+    },
+    "hierarchy_level": {
+      "type": "string",
+      "enum": ["long_term", "block", "weekly"],
+      "description": "long_term=overall season/year goal; block=4-8 week training block; weekly=this week's specific target."
+    },
+    "parent_goal_id": { "type": ["integer", "null"], "description": "ID of the parent long_term goal (for block/weekly goals)." },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "completed", "abandoned"]
+    },
+    "target_date": { "type": ["string", "null"], "format": "date" },
+    "target_metric": {
+      "type": ["object", "null"],
+      "description": "The measurable outcome target.",
+      "required": ["name", "value", "unit"],
+      "properties": {
+        "name": { "type": "string", "examples": ["weekly_distance_km", "ftp_watts", "sessions_per_week", "long_ride_duration_min"] },
+        "value": { "type": "number" },
+        "unit": { "type": "string", "examples": ["km", "watts", "sessions", "minutes"] }
+      }
+    },
+    "current_value": { "type": ["number", "null"], "description": "Latest known value for target_metric." },
+    "assumptions": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "What the system assumed when interpreting the free-text goal."
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Parse confidence 0-1."
+    },
+    "weekly_kpis": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["kpi", "target"],
+        "properties": {
+          "kpi": { "type": "string", "examples": ["3+ sessions/week", "long ride ≥ 90 min", "2 core sessions"] },
+          "target": { "type": "string" }
+        }
+      }
+    },
+    "constraints": {
+      "type": ["object", "null"],
+      "description": "User-specified constraints captured during goal parsing.",
+      "additionalProperties": true
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "sub_goals": {
+      "type": "array",
+      "description": "Nested block goals (only present on long_term goals in API responses).",
+      "items": { "$ref": "#" }
+    }
+  },
+  "definitions": {
+    "GoalProgress": {
+      "$id": "goal_progress.v1",
+      "title": "GoalProgress",
+      "description": "Weekly progress snapshot for a single goal.",
+      "type": "object",
+      "required": ["id", "goal_id", "week_start", "status"],
+      "properties": {
+        "id": { "type": "integer" },
+        "goal_id": { "type": "integer" },
+        "week_start": { "type": "string", "format": "date" },
+        "status": {
+          "type": "string",
+          "enum": ["on_track", "at_risk", "off_track"]
+        },
+        "metric_value": { "type": ["number", "null"] },
+        "kpis_snapshot": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["kpi", "achieved"],
+            "properties": {
+              "kpi": { "type": "string" },
+              "achieved": { "type": "boolean" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "narrative": { "type": ["string", "null"], "description": "Plain-language coaching note from LLM." },
+        "min_effective_alt": {
+          "type": ["object", "null"],
+          "description": "Proposed minimum-effective dose alternative when sessions are disrupted.",
+          "properties": {
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "sessions": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ParsedGoal": {
+      "title": "ParsedGoal",
+      "description": "LLM-parsed goal structure returned by the goal parser before persistence.",
+      "type": "object",
+      "required": ["title", "goal_type", "interpreted_intent", "assumptions", "confidence", "weekly_kpis"],
+      "properties": {
+        "title": { "type": "string" },
+        "goal_type": { "type": "string", "enum": ["performance", "consistency", "health", "skill", "event"] },
+        "interpreted_intent": { "type": "string", "description": "One sentence summary of what the system understood." },
+        "target_date": { "type": ["string", "null"], "format": "date" },
+        "target_metric": { "$ref": "#/properties/target_metric" },
+        "sub_goals": {
+          "type": "array",
+          "description": "Suggested block sub-goals (4-8 weeks each).",
+          "items": {
+            "type": "object",
+            "required": ["title", "duration_weeks", "focus"],
+            "properties": {
+              "title": { "type": "string" },
+              "duration_weeks": { "type": "integer", "minimum": 2, "maximum": 12 },
+              "focus": { "type": "string" },
+              "target_metric": { "$ref": "#/properties/target_metric" }
+            }
+          }
+        },
+        "assumptions": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weekly_kpis": { "$ref": "#/properties/weekly_kpis" },
+        "constraints": { "$ref": "#/properties/constraints" }
+      }
+    }
+  }
+}

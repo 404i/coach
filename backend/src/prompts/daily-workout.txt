@@ -10,6 +10,7 @@ ANALYSIS REQUIRED:
 4. Weekly Pattern: Where are they in current week? Hard days already done?
 5. Injury Status: Any active injuries or pain that limits exercise selection?
 6. Constraints: Available equipment, time, weather conditions
+7. Active Goals: Check context.active_goals[]. If any goal is at_risk or off_track, prefer sessions that serve it. Include goal_context in the plan.
 
 PLANNED ACTIVITIES RULES:
 - If athlete mentioned "yoga tonight" or "DH park next weekend" → prioritize those activities in recommendations
@@ -86,7 +87,8 @@ Return JSON with this EXACT structure:
     "reasoning": "Safest indoor option"
   },
   "coach_notes": "Brief motivational message and key advice for today",
-  "listen_to_body": "Specific signals athlete should monitor during workout, when to stop"
+  "listen_to_body": "Specific signals athlete should monitor during workout, when to stop",
+  "goal_context": "How today's recommended plan serves the athlete's active goals, or null if no active goals."
 }
 
 IMPORTANT:

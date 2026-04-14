@@ -2,6 +2,7 @@ import express from 'express';
 import { buildDailyContext, buildWeeklyContext } from '../services/context-builder.js';
 import { generateDailyWorkouts, generateWeeklyPlan } from '../services/llm-coach.js';
 import { generateSafeFallback } from '../services/validator.js';
+import { formatContextAsCombinedMarkdown } from '../services/context-markdown-formatter.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -80,6 +81,61 @@ router.get('/week', async (req, res) => {
       plan: fallbackPlan,
       is_fallback: true,
       fallback_reason: error.message
+    });
+  }
+});
+
+// POST /api/recommend/context - Get training context as structured markdown
+// Returns context without LLM generation for MCP clients to use with their own LLM
+router.post('/context', async (req, res) => {
+  try {
+    const { profile_id, date } = req.body;
+    
+    if (!profile_id || !date) {
+      return res.status(400).json({ error: 'profile_id and date required' });
+    }
+    
+    const context = await buildDailyContext(profile_id, date);
+    const markdown = formatContextAsCombinedMarkdown(context);
+    
+    res.json({
+      success: true,
+      date,
+      format: 'markdown',
+      context: markdown
+    });
+  } catch (error) {
+    logger.error('Context building failed:', error);
+    res.status(500).json({
+      error: 'Failed to build context',
+      message: error.message
+    });
+  }
+});
+
+// GET /api/recommend/context/week - Get weekly training context as structured markdown
+router.get('/context/week', async (req, res) => {
+  try {
+    const { profile_id, week_start } = req.query;
+    
+    if (!profile_id || !week_start) {
+      return res.status(400).json({ error: 'profile_id and week_start required' });
+    }
+    
+    const context = await buildWeeklyContext(profile_id, week_start);
+    const markdown = formatContextAsCombinedMarkdown(context);
+    
+    res.json({
+      success: true,
+      week_start,
+      format: 'markdown',
+      context: markdown
+    });
+  } catch (error) {
+    logger.error('Weekly context building failed:', error);
+    res.status(500).json({
+      error: 'Failed to build weekly context',
+      message: error.message
     });
   }
 });

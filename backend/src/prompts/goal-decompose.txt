@@ -1,0 +1,60 @@
+Decompose a long-term training goal into a sequence of focused training blocks (4-8 weeks each).
+
+LONG-TERM GOAL:
+{{GOAL}}
+
+ATHLETE PROFILE CONTEXT:
+{{PROFILE_CONTEXT}}
+
+TODAY'S DATE: {{TODAY}}
+
+INSTRUCTIONS:
+1. Determine the total available time between today and the target_date (or use 16-24 weeks if no date).
+2. Design 2-5 progressive training blocks that build toward the long-term goal:
+   - Each block should have a clear single emphasis (base, volume, intensity, skill, peak, taper).
+   - Blocks must progress logically — do NOT jump to peak intensity in block 1.
+   - Each block should specify a measurable intermediate target so progress can be checked.
+   - Duration per block: 4-8 weeks. Last block before event/date should be a peak or taper.
+3. For each block list 2-3 weekly_kpis that define success for that specific block.
+4. Consider the athlete's current injuries, constraints, and favorite_sports when designing blocks.
+
+BLOCK PHASING GUIDE:
+- Foundation (first block): focus on consistency, movement quality, easy aerobic volume.
+- Base Build: progressive volume increase, aerobic threshold work.
+- Intensity Build: introduce goal-specific intensity, reduce volume slightly.
+- Peak / Specificity: race-specific or goal-specific sessions, maintained intensity.
+- Taper / Transition: reduce volume 30-50%, maintain intensity, prepare for target event.
+
+IMPORTANT RULES:
+- Do NOT suggest more than 5 blocks.
+- Do NOT schedule an intensity block before a foundation or base block.
+- Each block's target_metric should be more demanding than the previous block.
+- start_week_offset is the number of weeks from today when this block begins (0 = starts now).
+
+OUTPUT REQUIREMENTS:
+Return ONLY valid JSON — no preamble, no explanation:
+
+{
+  "total_weeks": 16,
+  "decomposition_reasoning": "Brief explanation of the phasing logic",
+  "blocks": [
+    {
+      "block_number": 1,
+      "title": "Foundation",
+      "phase": "foundation|base|build|intensity|peak|taper",
+      "duration_weeks": 4,
+      "start_week_offset": 0,
+      "focus": "What this block emphasises in one sentence",
+      "target_metric": {
+        "name": "metric_key_snake_case",
+        "value": 0,
+        "unit": "unit_string"
+      },
+      "weekly_kpis": [
+        { "kpi": "3 sessions/week", "target": "≥3" }
+      ],
+      "key_sessions": ["Long easy aerobic session", "Mobility/strength circuit"],
+      "avoid": ["High-intensity intervals", "Racing"]
+    }
+  ]
+}

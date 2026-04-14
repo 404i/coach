@@ -1,0 +1,40 @@
+{
+  "_comment": "OpenCode MCP configuration for containerized Garmin AI Coach",
+  "_deployment": "Docker container (SSE mode)",
+  "_setup": "Copy this block into ~/.config/opencode/opencode.json under mcpServers",
+  
+  "mcpServers": {
+    "garmin-ai-coach": {
+      "type": "sse",
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_AUTH_TOKEN}"
+      },
+      "enabled": true
+    }
+  },
+  
+  "_instructions": [
+    "1. Get your MCP_AUTH_TOKEN from .env file:",
+    "   grep MCP_AUTH_TOKEN /Users/tsochkata/git/coach/.env",
+    "",
+    "2. Replace ${MCP_AUTH_TOKEN} above with the actual token value",
+    "",
+    "3. Copy the 'garmin-ai-coach' block to ~/.config/opencode/opencode.json",
+    "",
+    "4. Rebuild and restart the MCP container:",
+    "   cd /Users/tsochkata/git/coach",
+    "   docker compose build mcp",
+    "   docker compose up -d mcp",
+    "",
+    "5. Verify container is running:",
+    "   docker ps | grep garmin-ai-coach-mcp",
+    "   curl -H 'Authorization: Bearer YOUR_TOKEN' http://localhost:3001/health",
+    "",
+    "6. Kill any local MCP processes:",
+    "   ps aux | grep 'coach-mcp-server.js' | grep -v grep",
+    "   kill -9 <PID>",
+    "",
+    "7. Test in OpenCode - tools should now hit the containerized MCP server"
+  ]
+}

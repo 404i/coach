@@ -1,0 +1,70 @@
+Parse the athlete's training goal from free text into a structured goal object.
+
+ATHLETE PROFILE CONTEXT:
+{{PROFILE_CONTEXT}}
+
+GOAL TEXT:
+{{GOAL_TEXT}}
+
+INSTRUCTIONS:
+1. Identify the PRIMARY intent — what does the athlete actually want to achieve?
+2. Classify goal_type:
+   - performance: measurable physical output (speed, FTP, distance, time)
+   - consistency: building a habit or training frequency
+   - health: wellbeing, body composition, injury prevention
+   - skill: technique or capability improvement
+   - event: preparing for a specific race, event, or trip
+3. Extract any explicit or implied:
+   - Target date / event date
+   - Measurable metric with a number and unit
+   - Constraints the athlete expressed (avoid overreach, keep weekends free, fun, etc.)
+4. Generate 2-4 measurable weekly_kpis that would indicate progress toward this goal.
+5. List any assumptions you made to fill in missing specifics.
+6. Rate your confidence 0.0–1.0 based on how clearly the intent was expressed.
+7. Suggest 2-4 block sub_goals (4-8 weeks each) that would progressively build toward this goal.
+   Each block should have a clear focus and optionally an intermediate target_metric milestone.
+
+IMPORTANT RULES:
+- Do NOT invent a target_date if none is mentioned or implied — set it to null.
+- Do NOT invent a target_metric number if none is stated — set target_metric to null.
+- If goal is ambiguous, express uncertainty in assumptions[] and lower confidence.
+- weekly_kpis must be concrete and checkable (e.g., "3 bike sessions/week", "long ride ≥ 90 min").
+- sub_goals should be ordered chronologically: foundation first, volume/intensity build, then peak/event.
+
+OUTPUT REQUIREMENTS:
+Return ONLY valid JSON with this exact structure — no preamble, no explanation:
+
+{
+  "title": "Short title summarising the goal (max 80 chars)",
+  "goal_type": "performance|consistency|health|skill|event",
+  "interpreted_intent": "One clear sentence describing what you understood the athlete wants.",
+  "target_date": "YYYY-MM-DD or null",
+  "target_metric": {
+    "name": "metric_key_snake_case",
+    "value": 0,
+    "unit": "unit_string"
+  },
+  "sub_goals": [
+    {
+      "title": "Block 1 title",
+      "duration_weeks": 4,
+      "focus": "What this block emphasises",
+      "target_metric": { "name": "...", "value": 0, "unit": "..." }
+    }
+  ],
+  "assumptions": [
+    "Assumption 1 you made",
+    "Assumption 2..."
+  ],
+  "confidence": 0.85,
+  "weekly_kpis": [
+    { "kpi": "3 endurance sessions/week", "target": "≥3" },
+    { "kpi": "long ride ≥ 90 min", "target": "≥90 min" }
+  ],
+  "constraints": {
+    "avoid_overreaching": true,
+    "preferred_days": [],
+    "excluded_days": [],
+    "notes": "Any constraint notes"
+  }
+}

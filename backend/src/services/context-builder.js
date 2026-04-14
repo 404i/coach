@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { startOfWeek, subDays, format, addDays } from 'date-fns';
 import { getUpcomingActivities } from './planned-activities.js';
 import { estimateObjectTokens, TOKEN_BUDGET } from '../utils/token-estimator.js';
+import { getGoalHierarchy } from './goal-service.js';
 
 /**
  * Build comprehensive context for LLM coaching decisions
@@ -47,6 +48,8 @@ async function getTrainingMode(profileId) {
 
 /**
  * Get daily metrics for date range
+ * Note: profileId is a STRING (athlete_profiles.profile_id like "default")
+ * Need to resolve to user_id for daily_metrics queries
  */
 async function getDailyMetrics(profileId, startDate, endDate) {
   const profile = await db('athlete_profiles')
@@ -55,8 +58,9 @@ async function getDailyMetrics(profileId, startDate, endDate) {
   
   if (!profile) return [];
   
+  // Get user_id to query daily_metrics (which references users.id)
   const metrics = await db('daily_metrics')
-    .where({ profile_id: profile.id })
+    .where({ user_id: profile.user_id })
     .whereBetween('date', [startDate, endDate])
     .orderBy('date', 'asc');
   
@@ -211,24 +215,38 @@ export async function buildDailyContext(profileId, date) {
     // Get planned activities for context (next 7 days)
     const profileRecord = await db('athlete_profiles').where({ profile_id: profileId }).first();
     const plannedActivities = profileRecord ? await getUpcomingActivities(profileRecord.id, { daysAhead: 7 }) : [];
-    
+
+    // Get active smart goals with hierarchy and latest progress
+    let activeGoals = [];
+    if (profileRecord) {
+      try {
+        activeGoals = await getGoalHierarchy(profileRecord.id);
+      } catch (goalErr) {
+        logger.warn('Could not load active goals for daily context:', goalErr.message);
+      }
+    }
+
     // Get today's data if available
     const todayMetrics = dailyMetrics.find(d => d.date === date);
     
     const context = {
       date,
       profile: {
+        // Normalized top-level fields for easier LLM access
         goals: profile.goals,
         motivations: profile.motivations,
         favorite_sports: profile.favorite_sports,
+        days_per_week: profile.access?.days_per_week || profile.availability?.days_per_week || 3,
+        minutes_per_session: profile.access?.minutes_per_session || profile.availability?.minutes_per_session || 45,
         equipment: profile.access?.equipment || [],
         facilities: profile.access?.facilities || [],
-        days_per_week: profile.access?.days_per_week,
-        minutes_per_session: profile.access?.minutes_per_session,
         injuries: profile.injuries_conditions || [],
         baselines: profile.baselines,
         preferences: profile.preferences,
-        location: profile.location
+        location: profile.location,
+        // Keep nested structure for backward compatibility
+        access: profile.access,
+        availability: profile.availability
       },
       training_mode: trainingMode,
       recent_history: dailyMetrics.slice(-7),  // Last 7 days
@@ -250,7 +268,8 @@ export async function buildDailyContext(profileId, date) {
         is_event: pa.is_event,
         is_social: pa.is_social,
         context: pa.context
-      }))
+      })),
+      active_goals: activeGoals
     };
     
     logger.info(`Context built successfully for ${profileId}`);
@@ -293,6 +312,16 @@ export async function buildWeeklyContext(profileId, weekStartDate) {
       fromDate: weekStartDate,
       daysAhead: 7
     }) : [];
+
+    // Get active smart goals with full hierarchy for weekly planning
+    let activeGoals = [];
+    if (profileRecord) {
+      try {
+        activeGoals = await getGoalHierarchy(profileRecord.id);
+      } catch (goalErr) {
+        logger.warn('Could not load active goals for weekly context:', goalErr.message);
+      }
+    }
     
     return {
       week_start: weekStartDate,
@@ -324,7 +353,8 @@ export async function buildWeeklyContext(profileId, weekStartDate) {
         is_event: pa.is_event,
         is_social: pa.is_social,
         context: pa.context
-      }))
+      })),
+      active_goals: activeGoals
     };
   } catch (error) {
     logger.error(`Failed to build weekly context for ${profileId}:`, error);
