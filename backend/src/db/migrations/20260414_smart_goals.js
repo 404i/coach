@@ -4,108 +4,117 @@
  * Creates smart_goals and goal_progress tables.
  * Migrates existing athlete_profiles.training_goals free-text data into smart_goals rows.
  * Drops the training_goals column from athlete_profiles after migration.
+ *
+ * Idempotent: guarded by hasTable/hasColumn checks so restarts after partial
+ * failures don't re-run steps that already completed.
+ *
+ * Column drop uses raw SQL instead of Knex's alterTable().dropColumn() which
+ * does a full table recreation and can fail when the SQLite schema cache has
+ * stale references to tables from previous migrations (e.g. activities_old).
  */
 
 export async function up(knex) {
   // ── 1. smart_goals ────────────────────────────────────────────────────────
-  await knex.schema.createTable('smart_goals', (table) => {
-    table.increments('id').primary();
-    table.integer('profile_id').notNullable()
-      .references('id').inTable('athlete_profiles').onDelete('CASCADE');
+  const hasSmartGoals = await knex.schema.hasTable('smart_goals');
+  if (!hasSmartGoals) {
+    await knex.schema.createTable('smart_goals', (table) => {
+      table.increments('id').primary();
+      table.integer('profile_id').notNullable()
+        .references('id').inTable('athlete_profiles').onDelete('CASCADE');
 
-    // Free-text input that was used to create this goal
-    table.text('raw_text');
+      table.text('raw_text');
 
-    // Parsed / structured fields
-    table.string('title').notNullable();
-    table.enum('goal_type', ['performance', 'consistency', 'health', 'skill', 'event']).notNullable();
-    table.enum('hierarchy_level', ['long_term', 'block', 'weekly']).notNullable().defaultTo('long_term');
+      table.string('title').notNullable();
+      table.enum('goal_type', ['performance', 'consistency', 'health', 'skill', 'event']).notNullable();
+      table.enum('hierarchy_level', ['long_term', 'block', 'weekly']).notNullable().defaultTo('long_term');
 
-    // Self-referencing FK — block goals point to their long_term parent
-    table.integer('parent_goal_id').references('id').inTable('smart_goals').onDelete('SET NULL');
+      table.integer('parent_goal_id').references('id').inTable('smart_goals').onDelete('SET NULL');
 
-    table.enum('status', ['draft', 'active', 'paused', 'completed', 'abandoned'])
-      .notNullable().defaultTo('active');
+      table.enum('status', ['draft', 'active', 'paused', 'completed', 'abandoned'])
+        .notNullable().defaultTo('active');
 
-    // Target
-    table.date('target_date');
-    table.json('target_metric');   // { name: string, value: number, unit: string }
-    table.float('current_value');  // Latest known value for target_metric
+      table.date('target_date');
+      table.json('target_metric');
+      table.float('current_value');
 
-    // LLM-derived metadata
-    table.json('assumptions');     // string[] — what the system assumed when parsing
-    table.float('confidence');     // 0–1 parse confidence
-    table.json('weekly_kpis');     // { kpi: string, target: string }[]
-    table.json('constraints');     // user-specified constraints captured during parsing
+      table.json('assumptions');
+      table.float('confidence');
+      table.json('weekly_kpis');
+      table.json('constraints');
 
-    // Soft-delete / audit
-    table.timestamps(true, true);
+      table.timestamps(true, true);
 
-    // Indexes
-    table.index(['profile_id', 'status']);
-    table.index(['profile_id', 'hierarchy_level']);
-    table.index(['parent_goal_id']);
-  });
-
-  // ── 2. goal_progress ──────────────────────────────────────────────────────
-  await knex.schema.createTable('goal_progress', (table) => {
-    table.increments('id').primary();
-    table.integer('goal_id').notNullable()
-      .references('id').inTable('smart_goals').onDelete('CASCADE');
-
-    table.date('week_start').notNullable();
-    table.enum('status', ['on_track', 'at_risk', 'off_track']).notNullable();
-
-    table.float('metric_value');        // Actual measured value this week
-    table.json('kpis_snapshot');        // { kpi: string, achieved: boolean, value?: string }[]
-    table.text('narrative');            // LLM plain-language coaching note
-    table.json('min_effective_alt');    // Proposed alternative if disrupted { title, description, sessions[] }
-
-    table.timestamp('created_at').defaultTo(knex.fn.now());
-
-    table.index(['goal_id', 'week_start']);
-    table.unique(['goal_id', 'week_start']);
-  });
-
-  // ── 3. Migrate existing training_goals data ───────────────────────────────
-  const profiles = await knex('athlete_profiles')
-    .whereNotNull('training_goals')
-    .select('id', 'training_goals');
-
-  for (const profile of profiles) {
-    let goals;
-    try {
-      goals = typeof profile.training_goals === 'string'
-        ? JSON.parse(profile.training_goals)
-        : profile.training_goals;
-    } catch {
-      continue;
-    }
-
-    if (!Array.isArray(goals) || goals.length === 0) continue;
-
-    const rows = goals
-      .filter(g => typeof g === 'string' && g.trim().length > 0)
-      .map(g => ({
-        profile_id: profile.id,
-        raw_text: g.trim(),
-        title: g.trim().length > 80 ? g.trim().slice(0, 77) + '...' : g.trim(),
-        goal_type: 'performance',   // safe default — will be re-parsed by LLM on first access
-        hierarchy_level: 'long_term',
-        status: 'active',
-        created_at: new Date(),
-        updated_at: new Date()
-      }));
-
-    if (rows.length > 0) {
-      await knex('smart_goals').insert(rows);
-    }
+      table.index(['profile_id', 'status']);
+      table.index(['profile_id', 'hierarchy_level']);
+      table.index(['parent_goal_id']);
+    });
   }
 
-  // ── 4. Drop training_goals column ─────────────────────────────────────────
-  await knex.schema.alterTable('athlete_profiles', (table) => {
-    table.dropColumn('training_goals');
-  });
+  // ── 2. goal_progress ──────────────────────────────────────────────────────
+  const hasGoalProgress = await knex.schema.hasTable('goal_progress');
+  if (!hasGoalProgress) {
+    await knex.schema.createTable('goal_progress', (table) => {
+      table.increments('id').primary();
+      table.integer('goal_id').notNullable()
+        .references('id').inTable('smart_goals').onDelete('CASCADE');
+
+      table.date('week_start').notNullable();
+      table.enum('status', ['on_track', 'at_risk', 'off_track']).notNullable();
+
+      table.float('metric_value');
+      table.json('kpis_snapshot');
+      table.text('narrative');
+      table.json('min_effective_alt');
+
+      table.timestamp('created_at').defaultTo(knex.fn.now());
+
+      table.index(['goal_id', 'week_start']);
+      table.unique(['goal_id', 'week_start']);
+    });
+  }
+
+  // ── 3+4. Migrate data + drop column (only if column still exists) ─────────
+  const hasTrainingGoals = await knex.schema.hasColumn('athlete_profiles', 'training_goals');
+  if (hasTrainingGoals) {
+    const profiles = await knex('athlete_profiles')
+      .whereNotNull('training_goals')
+      .select('id', 'training_goals');
+
+    for (const profile of profiles) {
+      let goals;
+      try {
+        goals = typeof profile.training_goals === 'string'
+          ? JSON.parse(profile.training_goals)
+          : profile.training_goals;
+      } catch {
+        continue;
+      }
+
+      if (!Array.isArray(goals) || goals.length === 0) continue;
+
+      const rows = goals
+        .filter(g => typeof g === 'string' && g.trim().length > 0)
+        .map(g => ({
+          profile_id: profile.id,
+          raw_text: g.trim(),
+          title: g.trim().length > 80 ? g.trim().slice(0, 77) + '...' : g.trim(),
+          goal_type: 'performance',
+          hierarchy_level: 'long_term',
+          status: 'active',
+          created_at: new Date(),
+          updated_at: new Date()
+        }));
+
+      if (rows.length > 0) {
+        await knex('smart_goals').insert(rows);
+      }
+    }
+
+    // Use raw SQL — Knex's alterTable().dropColumn() recreates the whole table
+    // which fails when the SQLite schema cache contains stale table references
+    // (e.g. activities_old left by migration 20260403 FK fix).
+    await knex.raw('ALTER TABLE athlete_profiles DROP COLUMN training_goals');
+  }
 }
 
 export async function down(knex) {
