@@ -35,10 +35,14 @@ export async function getLoadOptimization(email, weeks = 12) {
       ...( typeof m.metrics_data === 'string' ? JSON.parse(m.metrics_data) : m.metrics_data)
     })).reverse(); // Oldest to newest for progression analysis
     
-    // Get activities from app database for sport distribution
-    const startDate = parsedMetrics[0].date;
+    // Get activities from app database for sport distribution.
+    // parsedMetrics[0].date may include a timezone suffix — slice to 10 chars
+    // so the date comparison in SQLite works correctly against stored "YYYY-MM-DD" values.
+    const startDate = String(parsedMetrics[0].date).slice(0, 10);
     const activities = await queryActivitiesForProfile(email, startDate);
     
+    logger.info(`Load optimization: startDate=${startDate}, metrics=${parsedMetrics.length}, activities=${activities.length}`);
+
     // Run all optimization analyses
     const rampRate = analyzeRampRate(parsedMetrics);
     const sportDistribution = analyzeSportDistribution(activities, parsedMetrics);
@@ -268,9 +272,11 @@ function calculateDistributionBalance(distribution) {
 function analyzeVolumeIntensityBalance(metrics, activities) {
   const last4Weeks = metrics.slice(-28);
   
-  // Calculate volume metrics
+  // Calculate volume metrics.
+  // daily_metrics.metrics_data does not store total_duration_seconds, so derive
+  // total hours from the activities array instead (elapsed_time in seconds via parseElapsedTime).
   const totalLoad = last4Weeks.reduce((sum, m) => sum + (m.training_load || 0), 0);
-  const totalTime = last4Weeks.reduce((sum, m) => sum + (m.total_duration_seconds || 0), 0) / 3600;
+  const totalTime = activities.reduce((sum, a) => sum + parseElapsedTime(a.elapsed_time), 0) / 3600;
   const avgDailyLoad = totalLoad / 28;
   
   // Analyze intensity distribution from activities

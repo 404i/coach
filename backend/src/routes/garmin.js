@@ -3,6 +3,7 @@ import { loginGarmin, submitMFA, validateSession, syncDateRange } from '../servi
 import { authenticateAndStore, attemptAutoReauth, getStoredCredentials, withAutoReauth } from '../services/auth-improved.js';
 import db from '../db/index.js';
 import logger from '../utils/logger.js';
+import { mapAppActivityToGarminSchema } from '../utils/activity-schema-mapper.js';
 
 const router = express.Router();
 
@@ -204,12 +205,17 @@ router.get('/metrics', async (req, res) => {
   try {
     const { email, start_date, end_date } = req.query;
     
-    if (!email && !start_date) {
-      return res.status(400).json({ error: 'email or start_date required' });
+    if (!email) {
+      return res.status(400).json({ error: 'email required' });
     }
     
-    // Build query
-    let query = db('daily_metrics');
+    const user = await db('users').where({ garmin_email: email }).first();
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Build query — always scoped to the requesting user
+    let query = db('daily_metrics').where({ user_id: user.id });
     
     if (start_date) {
       query = query.where('date', '>=', start_date);
@@ -269,11 +275,16 @@ router.get('/activities', async (req, res) => {
     
     const activities = await query;
     
-    // Parse raw_activity_data for each activity
-    const activitiesWithData = activities.map(act => ({
-      ...act,
-      raw_activity_data: act.raw_activity_data ? JSON.parse(act.raw_activity_data) : null
-    }));
+    // Parse raw_activity_data and map to human-readable schema
+    // (sport_type integer → sport string, normalise field names)
+    const activitiesWithData = activities.map(act => {
+      const mapped = mapAppActivityToGarminSchema({
+        ...act,
+        raw_activity_data: act.raw_activity_data ? JSON.parse(act.raw_activity_data) : null
+      });
+      // Preserve raw DB id fields not in the legacy schema
+      return { ...mapped, id: act.id, user_id: act.user_id, activity_id: act.activity_id };
+    });
     
     res.json({
       success: true,

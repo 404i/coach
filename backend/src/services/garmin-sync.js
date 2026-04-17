@@ -292,10 +292,14 @@ export async function syncDateRange(email, startDate, endDate) {
       
       for (const activity of activityList) {
         try {
-          // Extract date from activity
-          const activityDate = activity.startTimeLocal 
-            ? activity.startTimeLocal.split('T')[0] 
-            : (activity.startTimeGMT ? activity.startTimeGMT.split('T')[0] : null);
+          // Extract date from activity.
+          // startTimeLocal from Garmin API can use either a space separator ("2026-04-17 10:32:33")
+          // or ISO T-separator ("2026-04-17T10:32:33"). Normalise both with replace before slicing
+          // so we always store "YYYY-MM-DD" and same-day date-range queries work correctly.
+          const rawLocalTime = activity.startTimeLocal || activity.startTimeGMT;
+          const activityDate = rawLocalTime
+            ? rawLocalTime.replace('T', ' ').slice(0, 10)
+            : null;
           
           if (!activityDate) {
             logger.warn(`Activity ${activity.activityId} has no date, skipping`);

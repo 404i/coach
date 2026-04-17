@@ -92,7 +92,7 @@ export const TOOLS = [
   // ── Coaching / Chat ──────────────────────────────────────────────────────
   {
     name: "chat_with_coach",
-    description: "Have a natural conversation with the AI coach. Ask questions, discuss training, get advice on nutrition, recovery, race prep, or any training-related topics. CRITICAL: NEVER invent or hallucinate data. If metrics are null/missing, explicitly state 'NO DATA AVAILABLE' - do not make up values.",
+    description: "Fetch the athlete's recent training context (profile, metrics, activities) structured as coaching data. Returns raw context — USE this data to formulate your own coaching answer to the athlete's question. CRITICAL: NEVER invent or hallucinate data. If metrics are null/missing, explicitly state 'NO DATA AVAILABLE' - do not make up values.",
     inputSchema: {
       type: "object",
       properties: {

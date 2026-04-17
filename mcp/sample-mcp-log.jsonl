@@ -1,0 +1,20 @@
+{"level":"warn","message":"ENCRYPTION_KEY not set — Garmin credential encryption is disabled. Generate one with: openssl rand -hex 32","timestamp":"2026-04-07T14:31:31.926Z"}
+{"level":"warn","message":"BACKEND_API_KEY is not set or too short (min 32 chars). All API routes are unprotected. Generate one with: openssl rand -hex 32","timestamp":"2026-04-07T14:31:31.936Z"}
+{"level":"info","message":"Foreign key constraints enabled","timestamp":"2026-04-07T14:31:31.939Z"}
+{"level":"info","message":"Database migrations completed","timestamp":"2026-04-07T14:31:31.943Z"}
+{"level":"info","message":"Database initialized","timestamp":"2026-04-07T14:31:31.943Z"}
+{"level":"info","message":"Scheduled daily Garmin sync at 06:00","timestamp":"2026-04-07T14:31:31.945Z"}
+{"level":"info","message":"🚀 Garmin AI Coach API running on port 8080","timestamp":"2026-04-07T14:31:31.948Z"}
+{"level":"info","message":"Environment: development","timestamp":"2026-04-07T14:31:31.948Z"}
+{"level":"info","message":"LLM Provider: lmstudio (http://localhost:1234/v1)","timestamp":"2026-04-07T14:31:31.948Z"}
+{"level":"info","message":"Model: mistralai/devstral-small-2-2512","timestamp":"2026-04-07T14:31:31.948Z"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/load/distribution","timestamp":"2026-04-07T14:31:46.833Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/activity/distribution","timestamp":"2026-04-07T14:31:56.612Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/load/volume-intensity","timestamp":"2026-04-07T14:32:05.238Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/load/volume-intensity","timestamp":"2026-04-07T14:32:13.753Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/load/volume-intensity","timestamp":"2026-04-07T14:32:22.308Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/diary/weekly-summary","timestamp":"2026-04-07T14:32:32.716Z","userAgent":"curl/7.85.0"}
+{"level":"info","message":"Weekly summary: Retrieved duration from activities (3.0h)","timestamp":"2026-04-07T14:32:32.718Z"}
+{"level":"error","message":"LLM call failed:","timestamp":"2026-04-07T14:32:32.727Z"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/insights","timestamp":"2026-04-07T14:32:41.960Z","userAgent":"curl/7.85.0"}
+{"ip":"127.0.0.1","level":"info","message":"GET /api/insights","timestamp":"2026-04-07T14:32:50.870Z","userAgent":"curl/7.85.0"}

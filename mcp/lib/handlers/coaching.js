@@ -85,12 +85,6 @@ export const coachingHandlers = {
         text += `\n`;
       }
 
-      // Coaching prompt for AI
-      text += `**Instructions for AI:**\n`;
-      text += `Based on the above athlete data, provide personalized coaching advice to answer their question. `;
-      text += `Consider their recent training load, recovery metrics, activity patterns, and fitness level. `;
-      text += `Give practical, actionable guidance that helps them achieve their training goals safely and effectively.\n`;
-
       return {
         content: [{
           type: "text",

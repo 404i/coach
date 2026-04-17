@@ -455,7 +455,7 @@ async function generateWeeklySummary(email, weekStart, weekEnd) {
   });
   
   // If metrics don't have duration, query activities directly
-  if (totalHours === 0 && totalLoad > 0) {
+  if (totalHours === 0) {
     const activities = await db('activities')
       .where({ user_id: userId })
       .whereBetween('date', [weekStart, weekEnd]);
