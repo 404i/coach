@@ -2,6 +2,18 @@ import db from '../db/index.js';
 import logger from '../utils/logger.js';
 import { mapAppActivityToGarminSchema } from '../utils/activity-schema-mapper.js';
 
+// Maps sport name → Garmin sport_type integers so queries match
+// activities like e_bike_mountain/mountain_biking (sport_type=2) when
+// the caller searches for "cycling".
+const SPORT_TYPE_IDS_BY_NAME = {
+  cycling: [2, 21, 22],   // cycling, indoor_cycling, track_cycling
+  running: [1, 12],        // running, trail_running
+  swimming: [5],
+  hiking: [15],
+  walking: [14],
+  skiing: [13, 32],
+};
+
 /**
  * Query app database for activities and map to legacy schema
  * @param {string} email - Athlete email
@@ -21,9 +33,16 @@ export async function queryActivitiesForProfile(email, startDate, sport = null) 
     .orderBy('start_time', 'desc');
   
   if (sport) {
-    // Match on activity_type (e.g., "indoor_cycling") using LIKE pattern
-    // since sport_type is numeric (2=cycling, 5=swimming, etc.)
-    query = query.where('activity_type', 'like', `%${sport}%`);
+    const sportTypeIds = SPORT_TYPE_IDS_BY_NAME[sport.toLowerCase()];
+    if (sportTypeIds) {
+      // Match by activity_type text OR by the numeric sport_type column
+      query = query.where(function() {
+        this.where('activity_type', 'like', `%${sport}%`)
+          .orWhereIn('sport_type', sportTypeIds);
+      });
+    } else {
+      query = query.where('activity_type', 'like', `%${sport}%`);
+    }
   }
   
   const activities = await query;

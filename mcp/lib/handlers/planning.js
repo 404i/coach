@@ -206,9 +206,11 @@ export const planningHandlers = {
       response = `${freshnessNote}\n\n🚨 **ACTIVITY VERIFICATION**:\n${activityCtx.warning}\n\n` +
         `📅 Latest activity: ${activityCtx.latest_activity_date || 'unknown'}\n` +
         `⏱️  Days since last: ${activityCtx.days_since_last || 'unknown'}\n\n` +
-        (activityCtx.days_since_last > 2
-          ? `⚠️  **NO RECENT ACTIVITIES** - Garmin sync may be needed. Recommendations based on metrics only.\n\n`
-          : '') +
+        (activityCtx.days_since_last > 7
+          ? `⚠️  **SYNC RECOMMENDED** - No activities in ${activityCtx.days_since_last} days. Recommendations based on metrics only.\n\n`
+          : activityCtx.days_since_last > 2
+            ? `📅 Last activity was ${activityCtx.days_since_last} days ago (${activityCtx.latest_activity_date}) — recommendations incorporate recent history.\n\n`
+            : '') +
         `**WORKOUT RECOMMENDATIONS**:\n${response}`;
     }
     return { content: [{ type: "text", text: response }] };

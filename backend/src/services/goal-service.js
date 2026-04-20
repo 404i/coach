@@ -85,22 +85,89 @@ export async function parseGoalFromText(profileId, text) {
     .replace('{{PROFILE_CONTEXT}}', JSON.stringify(profileCtx, null, 2))
     .replace('{{GOAL_TEXT}}', text);
 
-  const { content } = await callLLM(
-    [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
-    { maxTokens: 1200 }
-  );
+  try {
+    const { content } = await callLLM(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      { maxTokens: 1200 }
+    );
 
-  const parsed = extractJSON(content);
+    const parsed = extractJSON(content);
 
-  // Basic sanity check
-  if (!parsed.title || !parsed.goal_type) {
-    throw new Error('Goal parse returned incomplete structure');
+    // Basic sanity check
+    if (!parsed.title || !parsed.goal_type) {
+      throw new Error('Goal parse returned incomplete structure');
+    }
+
+    return parsed;
+  } catch (error) {
+    // LLM unavailable or timed out — use rule-based fallback so goal creation
+    // still works without the local model running.
+    if (
+      error.message.includes('timed out') ||
+      error.message.includes('not reachable') ||
+      error.message.includes('ECONNREFUSED')
+    ) {
+      logger.warn('LLM unavailable for goal parse — using rule-based fallback:', error.message);
+      return parseGoalFallback(text);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Rule-based goal parser used as fallback when LLM is unavailable/timed-out.
+ * Covers the most common cases with keyword matching.
+ */
+function parseGoalFallback(text) {
+  const t = text.toLowerCase();
+
+  // Determine goal type
+  let goal_type = 'performance';
+  if (/consist|regular|habit|every week|per week/.test(t)) goal_type = 'consistency';
+  else if (/health|weight|sleep|recover|stress/.test(t)) goal_type = 'health';
+  else if (/skill|technique|learn|improv.*form/.test(t)) goal_type = 'skill';
+  else if (/race|event|triathlon|marathon|century|gran fondo|competition/.test(t)) goal_type = 'event';
+
+  // Determine target date
+  let target_date = null;
+  const yearMatch = text.match(/\b(20\d\d)\b/);
+  const monthMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
+  if (yearMatch) {
+    const year = yearMatch[1];
+    let month = null;
+    for (const [abbr, num] of Object.entries(monthMap)) {
+      if (t.includes(abbr)) { month = num; break; }
+    }
+    target_date = `${year}-${month || '06'}-01`;
+  } else if (/next month/.test(t)) {
+    const d = new Date(); d.setMonth(d.getMonth() + 1);
+    target_date = d.toISOString().split('T')[0];
+  } else if (/3.?month/.test(t)) {
+    const d = new Date(); d.setMonth(d.getMonth() + 3);
+    target_date = d.toISOString().split('T')[0];
+  } else if (/6.?month/.test(t)) {
+    const d = new Date(); d.setMonth(d.getMonth() + 6);
+    target_date = d.toISOString().split('T')[0];
   }
 
-  return parsed;
+  const title = text.trim().length > 80 ? text.trim().slice(0, 77) + '...' : text.trim();
+
+  return {
+    title,
+    goal_type,
+    hierarchy_level: 'long_term',
+    status: 'active',
+    target_date,
+    assumptions: [],
+    weekly_kpis: [],
+    constraints: null,
+    confidence: 0.6,
+    interpreted_intent: text,
+    _fallback: true
+  };
 }
 
 /**

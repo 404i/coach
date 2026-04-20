@@ -100,7 +100,30 @@ Return ONLY valid JSON:
       { role: 'user', content: prompt }
     ],
     { maxTokens: 700 }
-  );
+  ).catch(err => {
+    if (err.message.includes('timed out') || err.message.includes('not reachable') || err.message.includes('ECONNREFUSED')) {
+      logger.warn('LLM unavailable for goal adaptation — using rule-based fallback:', err.message);
+      return { content: null };
+    }
+    throw err;
+  });
+
+  // Rule-based fallback when LLM is down
+  if (!content) {
+    return {
+      original_goal: { id: goal.id, title: goal.title, goal_type: goal.goal_type, weekly_kpis: weeklyKpis },
+      min_effective_alt: {
+        weeks_missed: disruptions.length,
+        sessions: [],
+        rationale: `LLM unavailable — reschedule ${disruptions.join(', ')} to the next available window. Focus on completing any remaining sessions at easy intensity.`,
+        impact_on_goal: 'moderate',
+        original_kpis_at_risk: [],
+        kpis_still_achievable: weeklyKpis.map(k => typeof k === 'object' ? k.kpi : k)
+      },
+      rationale: 'LLM unavailable — rule-based fallback applied',
+      _fallback: true
+    };
+  }
 
   const result = extractJSON(content);
 

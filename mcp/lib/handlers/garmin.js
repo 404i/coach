@@ -114,8 +114,8 @@ export const garminHandlers = {
     summaryText += `\n`;
 
     if (data.activities && data.activities.length > 0) {
-      const types = [...new Set(data.activities.map(a => a.activity_type))];
-      summaryText += `✓ Found ${data.activities.length} activities. Types: ${types.join(', ')}.\n\n`;
+      const types = [...new Set(data.activities.map(a => a.activity_type).filter(Boolean))];
+      summaryText += `✓ Found ${data.activities.length} activities. Types: ${types.length ? types.join(', ') : 'unknown'}.\n\n`;
     } else {
       summaryText += '🚨 **NO ACTIVITIES FOUND**. The athlete has no recorded workouts in this date range.\n';
       summaryText += '⚠️  **ACTION**: Check if Garmin sync is needed or if athlete is new to system.\n\n';

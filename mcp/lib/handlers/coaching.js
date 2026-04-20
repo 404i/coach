@@ -24,11 +24,11 @@ export const coachingHandlers = {
       // Gather all coaching context data
       const profile = await callAPI(`/api/profile?email=${encodeURIComponent(email)}`);
       
-      // Get recent training metrics (last 7 days)
-      const metricsData = await callAPI(`/api/garmin/metrics?email=${encodeURIComponent(email)}&days=7`);
+      // Get recent training metrics (last 14 days for better coverage)
+      const metricsData = await callAPI(`/api/garmin/metrics?email=${encodeURIComponent(email)}&days=14`);
       
-      // Get recent activities (last 10)
-      const activitiesData = await callAPI(`/api/strava/activities?email=${encodeURIComponent(email)}&limit=10`);
+      // Get recent activities (last 10) from Garmin, not Strava
+      const activitiesData = await callAPI(`/api/garmin/activities?email=${encodeURIComponent(email)}&limit=10`);
 
       // Build structured coaching context
       const context = {

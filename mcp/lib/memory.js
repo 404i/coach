@@ -12,39 +12,50 @@ export async function initializeMemoryFromProfile(email) {
     const profile = profileData.profile;
     if (!profile) throw new Error('Profile not found');
 
+    // Merge structured fields with top-level legacy fields from the raw profile row
+    const favoriteSports = (profile.favorite_sports && profile.favorite_sports.length > 0)
+      ? profile.favorite_sports
+      : (profile.sport_type ? [profile.sport_type] : []);
+
+    const goals = (profile.goals && profile.goals.length > 0)
+      ? profile.goals
+      : (Array.isArray(profile.training_goals) ? profile.training_goals : []);
+
     return {
       email,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       name: profile.name || '',
       location: profile.location || {},
-      favorite_sports: profile.favorite_sports || [],
-      goals: profile.goals || [],
+      favorite_sports: favoriteSports,
+      goals,
       motivations: profile.motivations || [],
       constraints: profile.constraints || [],
-      goals_discussed: (profile.goals || []).map(g => ({
+      goals_discussed: (goals).map(g => ({
         timestamp: profile.created_at,
         goal: g,
       })),
       equipment: profile.access?.equipment || [],
       facilities: profile.access?.facilities || [],
-      days_per_week: profile.access?.days_per_week || 3,
+      days_per_week: profile.access?.days_per_week || profile.weekly_hours || 3,
       minutes_per_session: profile.access?.minutes_per_session || 45,
-      injuries_conditions: profile.injuries_conditions || [],
-      injuries_history: (profile.injuries_conditions || []).map(inj => ({
+      injuries_conditions: profile.injuries_conditions || profile.recent_injuries || [],
+      injuries_history: (profile.injuries_conditions || profile.recent_injuries || []).map(inj => ({
         timestamp: profile.created_at,
-        injury: inj.name,
-        status: inj.status,
+        injury: typeof inj === 'string' ? inj : inj.name,
+        status: inj.status || 'unknown',
         severity: inj.severity_0_10,
         contraindications: inj.contraindications || [],
       })),
-      baselines: profile.baselines || {},
+      baselines: { ...(profile.baselines || {}), hrv: profile.baseline_hrv || undefined },
       preferences: {
         max_hard_days_per_week: profile.preferences?.max_hard_days_per_week || 2,
         preferred_training_time: profile.preferences?.preferred_training_time || 'either',
         likes_variety: profile.preferences?.likes_variety !== undefined ? profile.preferences.likes_variety : true,
         ...(profile.preferences || {}),
       },
+      training_mode: profile.training_mode || null,
+      weekly_hours: profile.weekly_hours || null,
       conversation_history: [],
       important_notes: [],
       training_philosophy: [],
