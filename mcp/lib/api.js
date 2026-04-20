@@ -3,7 +3,7 @@
  */
 import fetch from 'node-fetch';
 
-export const API_BASE_URL = process.env.COACH_API_URL || 'http://localhost:8088';
+export const API_BASE_URL = process.env.COACH_API_URL || 'http://localhost:8080';
 
 export async function callAPI(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
