@@ -10,6 +10,7 @@ services:
     container_name: garmin-ai-coach-personal
     ports:
       - "8080:8080"
+      - "8088:8080"
     volumes:
       # Mount your existing GarminDB data
       - ${GARMINDB_PATH:-~/HealthData}:/app/data/garmin/HealthData:ro
