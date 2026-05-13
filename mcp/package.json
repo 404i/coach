@@ -12,7 +12,7 @@
     "serve": "MCP_HTTP_MODE=true node coach-mcp-server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2"
   },
